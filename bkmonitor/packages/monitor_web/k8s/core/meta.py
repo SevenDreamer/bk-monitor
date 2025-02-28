@@ -8,7 +8,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 """
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 
 from django.db.models import F, Max, Value
 from django.db.models.functions import Concat
@@ -30,8 +30,10 @@ class FilterCollection(object):
 
     def __init__(self, meta):
         self.filters = dict()
-        self.meta = meta
+        self.meta: K8sResourceMeta = meta
+        # 拉起k8s资源类的 query_set
         self.query_set = meta.resource_class.objects.all().order_by("id")
+        # 这里补充 query_ser
         if meta.only_fields:
             self.query_set = self.query_set.only(*self.meta.only_fields)
 
@@ -138,7 +140,11 @@ class K8sResourceMeta(object):
         agg_interval = hms_string(time_passed, upper=True)
         self.agg_interval = agg_interval
 
-    def set_agg_method(self, method="sum"):
+    def set_agg_method(self, method: Literal["max", "avg", "min", "sum", "count"] = "sum"):
+        """
+        设置聚合方法
+        如果方法是 count, 还会重置聚合查询的间隔
+        """
         self.method = method
         if method == "count":
             # 重置interval
@@ -227,7 +233,7 @@ class K8sResourceMeta(object):
         self.set_agg_method()
         return obj_list
 
-    def get_resource_name(self, series):
+    def get_resource_name(self, series) -> str:
         meta_field_list = [series["dimensions"][field] for field in self.resource_field_list]
         return ":".join(meta_field_list)
 
@@ -259,7 +265,7 @@ class K8sResourceMeta(object):
         raise NotImplementedError(f"metric: {order_field} not supported")
 
     @property
-    def meta_prom_with_container_memory_rss(self):
+    def meta_prom_with_container_memory_rss(self) -> str:
         return self.tpl_prom_with_nothing("container_memory_rss")
 
     @property
@@ -294,10 +300,10 @@ class K8sResourceMeta(object):
     def meta_prom_with_container_cpu_cfs_throttled_ratio(self):
         raise NotImplementedError("metric: [container_cpu_cfs_throttled_ratio] not supported")
 
-    def tpl_prom_with_rate(self, metric_name, exclude=""):
+    def tpl_prom_with_rate(self, metric_name, exclude="") -> str:
         raise NotImplementedError(f"metric: [{metric_name}] not supported")
 
-    def tpl_prom_with_nothing(self, metric_name, exclude=""):
+    def tpl_prom_with_nothing(self, metric_name, exclude="") -> str:
         raise NotImplementedError(f"metric: [{metric_name}] not supported")
 
     @property
@@ -800,7 +806,23 @@ class K8sContainerMeta(K8sResourceMeta):
         return promql
 
 
-def load_resource_meta(resource_type: str, bk_biz_id: int, bcs_cluster_id: str) -> Optional[K8sResourceMeta]:
+def load_resource_meta(
+    resource_type: Literal["pod", "workload", "namespace", "container"], bk_biz_id: int, bcs_cluster_id: str
+) -> Optional[K8sResourceMeta]:
+    """
+    加载对应的资源元信息 实例
+    ```python
+    {
+        'node': K8sNodeMeta,
+        'container': K8sContainerMeta,
+        'container_name': K8sContainerMeta,
+        'pod': K8sPodMeta,
+        'pod_name': K8sPodMeta,
+        'workload': K8sWorkloadMeta,
+        'namespace': K8sNamespaceMeta,
+    }
+    ```
+    """
     resource_meta_map = {
         'node': K8sNodeMeta,
         'container': K8sContainerMeta,

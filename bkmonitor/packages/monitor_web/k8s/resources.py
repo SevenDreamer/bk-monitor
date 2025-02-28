@@ -19,12 +19,16 @@ from rest_framework import serializers
 from apm_web.utils import get_interval_number
 from bkmonitor.models import BCSWorkload
 from core.drf_resource import Resource, resource
-from monitor_web.k8s.core.filters import load_resource_filter
+from monitor_web.k8s.core.filters import ResourceFilter, load_resource_filter
 from monitor_web.k8s.core.meta import K8sResourceMeta, load_resource_meta
 from monitor_web.k8s.scenario import get_metrics
 
 
 class ListBCSCluster(Resource):
+    """
+    获取业务下的集群列表
+    """
+
     class RequestSerializer(serializers.Serializer):
         bk_biz_id = serializers.IntegerField(required=True, label="业务ID")
 
@@ -34,6 +38,13 @@ class ListBCSCluster(Resource):
 
 
 class WorkloadOverview(Resource):
+    """
+    获取 Workload 总览
+
+    workload 下还有一层 workload_type
+    该接口的目录是统计 不同 workload_type 的数量
+    """
+
     class RequestSerializer(serializers.Serializer):
         bk_biz_id = serializers.IntegerField(required=True, label="业务ID")
         bcs_cluster_id = serializers.CharField(required=True, label="集群id")
@@ -199,6 +210,7 @@ class GetResourceDetail(Resource):
             **{"bk_biz_id": bk_biz_id, "bcs_cluster_id": bcs_cluster_id, **extra_request_arg}
         )
 
+        # 返回的不同 reource_type 的信息，但是如果里面有 type == "link" 的数据，需要转化成 type = "string"
         for item in items:
             self.link_to_string(item)
 
@@ -255,6 +267,7 @@ class ListK8SResources(Resource):
             default="desc",
         )
         method = serializers.ChoiceField(required=False, choices=["max", "avg", "min", "sum", "count"], default="sum")
+        # 用不同的指标来进行排序
         column = serializers.ChoiceField(
             required=False,
             choices=[
@@ -357,8 +370,9 @@ class ListK8SResources(Resource):
             resource_list = resource_list[:page_count]
         return {"count": total_count, "items": resource_list}
 
-    def add_filter(self, meta: K8sResourceMeta, filter_dict: Dict):
+    def add_filter(self, meta: K8sResourceMeta, filter_dict: Dict) -> None:
         """
+        执行meta.filter.add
         filter_dict = {
             "pod": ["pod1", "pod2"],
             "namespace": ["namespace1", "namespace2"],
@@ -401,6 +415,7 @@ class ResourceTrendResource(Resource):
         end_time = serializers.IntegerField(required=True, label="结束时间")
 
     def perform_request(self, validated_request_data):
+        # 无关紧要的替换
         bk_biz_id: int = validated_request_data["bk_biz_id"]
         bcs_cluster_id: str = validated_request_data["bcs_cluster_id"]
         resource_type: str = validated_request_data["resource_type"]
@@ -415,14 +430,20 @@ class ResourceTrendResource(Resource):
         agg_method = validated_request_data["method"]
         resource_meta.set_agg_method(agg_method)
         resource_meta.set_agg_interval(start_time, end_time)
+        # ListK8SResources() 这个类没有用到，只是调用了里面的方法，不要被误导了
         ListK8SResources().add_filter(resource_meta, validated_request_data["filter_dict"])
         column = validated_request_data["column"]
         series_map = {}
-        metric = resource.k8s.get_scenario_metric(metric_id=column, scenario="performance")
+
+        # 返回指标的信息{"id":"xx", "name":"xx", "unit":"xx", unsupported_resource": ["xx"]}
+        # 然而目的只是为了获取name，和unit 也就是指标的中文名称以及对应的指标单位
+        metric: Dict[str, str | list[str]] = resource.k8s.get_scenario_metric(metric_id=column, scenario="performance")
         unit = metric["unit"]
         if resource_type == "workload":
             # workload 单独处理
-            promql_list = []
+            # 对于 workload 来说返回的字符串格式是 namespace|workload_type:workload_name 这样过来的
+            # 所以需要分开处理
+            promql_list: List[str] = []
             for wl in resource_list:
                 # workload 资源，需要带上namespace 信息: blueking|Deployment:bk-monitor-web
                 try:
@@ -430,18 +451,29 @@ class ResourceTrendResource(Resource):
                 except ValueError:
                     # 不符合预期的数据， ns置空
                     ns = ""
-                tmp_filter_chain = []
-                tmp_filter_chain.append(load_resource_filter(resource_type, [wl]))
+
+                # tmp_filter_chain 里面只会有关于 namespace 和 workload的过滤条件
+                tmp_filter_chain: List[ResourceFilter] = []
+                tmp_filter_chain.append(load_resource_filter(resource_type, [wl]))  # resource_type <- "workload"
                 tmp_filter_chain.append(load_resource_filter("namespace", [ns]))
+                # 将 namespace 和 workload_type 两个的过滤条件添加到 meta.filter 中
                 [resource_meta.filter.add(filter_obj) for filter_obj in tmp_filter_chain]
+                # 这里本质上是将 workloadMeta 的 promql 语句添加进来
                 promql_list.append(getattr(resource_meta, f"meta_prom_with_{column}"))
+                # 由于是批量添加一堆的 workload,
+                # 所以下面就直接删掉 workloadMeta.filter中关于 workload 和 namespce 的过滤条件，
+                # 让后面的for循环能接着用
                 [resource_meta.filter.remove(filter_obj) for filter_obj in tmp_filter_chain]
+
+            # 最后用 or 拼接多个promql
             promql = " or ".join(promql_list)
         else:
             resource_meta.filter.add(load_resource_filter(resource_type, resource_list))
             # 不用topk 因为有resource_list
             promql = getattr(resource_meta, f"meta_prom_with_{column}")
         interval = get_interval_number(start_time, end_time, interval=60)
+
+        # 构建unify_query 请求参数并发送请求
         query_params = {
             "bk_biz_id": bk_biz_id,
             "query_configs": [
@@ -480,4 +512,17 @@ class ResourceTrendResource(Resource):
                 datapoints = []
             series_map[resource_name] = {"datapoints": datapoints, "unit": unit, "value_title": metric["name"]}
 
+        """
+        返回格式
+        ```python
+        [
+            {"resource_name": "xx", column: {"datapoints": [], "unit": "xx", "value_title": "metric_name"}}
+            # 下面是 workload 的例子
+            {
+                "resource_name": "namespace_name|workload_name",
+                column: {"datapoints": [], "unit": "xx", "value_title": "metric_name"}
+            }
+        ]
+        ```
+        """
         return [{"resource_name": name, column: info} for name, info in series_map.items()]

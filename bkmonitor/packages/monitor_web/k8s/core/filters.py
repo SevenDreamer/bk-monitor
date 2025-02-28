@@ -22,10 +22,11 @@ def register_filter(filter_cls):
 
 
 class ResourceFilter(object):
-    resource_type = ""
-    filter_field = ""
+    resource_type = ""  # 可以理解为是表名
+    filter_field = ""  # 可以理解为是这个表唯二的字段
 
     def __init__(self, value, fuzzy=False):
+        # 接收一个值，如果这个不是 list or typle 那么给它外呈用List包裹起来
         if not isinstance(value, (list, tuple)):
             value = [value]
         value = list(map(str, value))
@@ -40,6 +41,10 @@ class ResourceFilter(object):
     def filter_dict(self) -> Dict:
         """
         用于ORM的查询
+
+        如果只有一个，这直接进行对应
+        如果只有一个，并且 fuzzy = True 则进行模糊查询 看是否包含在内
+        如果不止一个则写成django的  field_in
         """
         if len(self.value) == 1:
             if self.fuzzy:
@@ -146,7 +151,7 @@ class SpaceFilter(ResourceFilter):
     filter_field = "bk_biz_id"
 
 
-def load_resource_filter(resource_type, filter_value, fuzzy=False) -> ResourceFilter:
+def load_resource_filter(resource_type: str, filter_value, fuzzy=False) -> ResourceFilter:
     if resource_type not in filter_options:
         # 兼容xxx_name字段
         if resource_type.endswith("_name"):

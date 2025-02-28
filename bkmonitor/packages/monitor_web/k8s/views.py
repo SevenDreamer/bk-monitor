@@ -19,16 +19,16 @@ class ResourcesViewSet(ResourceViewSet):
         return [BusinessActionPermission([ActionEnum.VIEW_BUSINESS])]
 
     resource_routes = [
-        # 获取集群列表
+        # 获取集群列表 √
         ResourceRoute("GET", resource.k8s.list_bcs_cluster, endpoint="list_bcs_cluster"),
-        # 获取场景下指标列表
+        # 获取场景下指标列表 √
         ResourceRoute("GET", resource.k8s.scenario_metric_list, endpoint="scenario_metric_list"),
         # 获取指定集群下资源列表
         ResourceRoute("POST", resource.k8s.list_k8s_resources, endpoint="list_resources"),
-        # 获取指定资源的详情
+        # 获取指定资源的详情 √2
         ResourceRoute("GET", resource.k8s.get_resource_detail, endpoint="get_resource_detail"),
-        # 获取 Workload 总览
+        # 获取 Workload 总览 √
         ResourceRoute("GET", resource.k8s.workload_overview, endpoint="workload_overview"),
-        # 获取资源性能趋势
+        # 获取资源性能趋势 √2
         ResourceRoute("POST", resource.k8s.resource_trend, endpoint="resource_trend"),
     ]

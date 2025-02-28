@@ -9,7 +9,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 """
 from collections import namedtuple
-from typing import List
+from typing import Callable, Dict, List
 
 from django.utils.module_loading import import_string
 
@@ -18,15 +18,15 @@ Category = namedtuple("Category", ["id", "name", "children"])
 Metric = namedtuple("Metric", ["id", "name", "unit", "unsupported_resource"])
 
 
-def get_metrics(scenario) -> List:
+def get_metrics(scenario) -> List[dict]:
     """
     获取指标
     """
-    metrics_generator = import_string(f"{get_metrics.__module__}.{scenario}.get_metrics")
+    metrics_generator: Callable[..., List[Category]] = import_string(f"{get_metrics.__module__}.{scenario}.get_metrics")
     metrics = metrics_generator()
     metrics_list = []
     for category in metrics:
-        category_dict = category._asdict()
+        category_dict: Dict[str, str | List[Metric]] = category._asdict()
         if category_dict["children"]:
             category_dict["children"] = [dict(metric._asdict()) for metric in category_dict["children"]]
         metrics_list.append(dict(category_dict))
