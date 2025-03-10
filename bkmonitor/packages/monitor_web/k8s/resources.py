@@ -9,7 +9,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 """
 from collections import OrderedDict
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from django.core.exceptions import FieldError
 from django.core.paginator import Paginator
@@ -51,7 +51,7 @@ class WorkloadOverview(Resource):
         namespace = serializers.CharField(required=False, label="命名空间")
         query_string = serializers.CharField(required=False, label="名字过滤")
 
-    def perform_request(self, validated_request_data):
+    def perform_request(self, validated_request_data: Dict[str, Any | str]):
         bk_biz_id = validated_request_data["bk_biz_id"]
         bcs_cluster_id = validated_request_data["bcs_cluster_id"]
 
@@ -76,6 +76,7 @@ class WorkloadOverview(Resource):
         ]
         """
         result = queryset.values('type').annotate(count=Count('name', distinct=True))
+        # 设置统计workload_type的字典，比默认为0
         kind_map = OrderedDict.fromkeys(["Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"], 0)
         for item in result:
             if item["type"] not in kind_map:
@@ -145,6 +146,7 @@ class GetResourceDetail(Resource):
         bcs_cluster_id: str = serializers.CharField(required=True)
         bk_biz_id: int = serializers.IntegerField(required=True)
         namespace: str = serializers.CharField(required=True)
+
         resource_type: str = serializers.ChoiceField(
             required=True, choices=["pod", "workload", "container", "cluster"], label="资源类型"
         )
@@ -155,6 +157,11 @@ class GetResourceDetail(Resource):
         workload_type: str = serializers.CharField(required=False, allow_null=True)
 
     def validate_request_data(self, request_data: Dict):
+        """
+        根据 resource_type -> ["pod", "workload", "container", "cluster"] 验证请求数据
+        确保所需的字段 fields 存在。
+        根据不同的资源类型，调用 validate_field_exist 方法检查必需字段是否存在
+        """
         resource_type = request_data["resource_type"]
         if resource_type == "pod":
             fields = ["pod_name"]
@@ -171,6 +178,9 @@ class GetResourceDetail(Resource):
 
     @classmethod
     def validate_field_exist(cls, resource_type: str, fields: List[str], request_data: Dict) -> None:
+        """
+        校验字段是否存在，如果不存在则抛出异常
+        """
         for field in fields:
             if not request_data.get(field):
                 raise serializers.ValidationError(
@@ -203,9 +213,20 @@ class GetResourceDetail(Resource):
             "container": [resource.scene_view.get_kubernetes_container, ["namespace", "pod_name", "container_name"]],
         }
         # 构建同名字典 -> {"field":validated_request_data["field"]}
+        """
+        示例: workload 的
+        ```python
+        {
+            "namespace": validataed_request_data["namespace"],
+            "workload_name": validated_request_data["workload_name"],
+            "workload_type": validated_request_data["workload_type"],
+        }
+        ```
+        """
         extra_request_arg = {key: validated_request_data[key] for key in resource_router[resource_type][1]}
 
         # 调用对应的资源类型的接口，返回对应的接口数据
+        # 即 items = resource.scene_view.get_kubernetes_workload(**request_arg)
         items = resource_router[resource_type][0](
             **{"bk_biz_id": bk_biz_id, "bcs_cluster_id": bcs_cluster_id, **extra_request_arg}
         )
@@ -390,6 +411,7 @@ class ResourceTrendResource(Resource):
     class RequestSerializer(FilterDictSerializer):
         bcs_cluster_id = serializers.CharField(required=True)
         bk_biz_id = serializers.IntegerField(required=True)
+        # 目前只有性能场景，所以暂时只有这些指标
         column = serializers.ChoiceField(
             required=True,
             choices=[
