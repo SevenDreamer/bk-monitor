@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 ## 接口列表
 
@@ -960,6 +961,8 @@ rest/v2/k8s/resources/resource_trend/
 | nw_container_network_transmit_packets_total | 网络出包量   |
 
 >>>>>>> 7997fbb9e (chore: 新增观测场景容器文档)
+=======
+>>>>>>> 7e3107498 (chore: 更新文档)
 ## 错误定义
 
 ### k8s.core.errors.K8sResourceNotFound
@@ -1026,9 +1029,12 @@ def filter_string(self) -> str:
 | ServiceFilter          | service           | service        |
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 7997fbb9e (chore: 新增观测场景容器文档)
+=======
+>>>>>>> 7e3107498 (chore: 更新文档)
 ### k8s.core.filters.register_filter(filter_cls)
 
 一个装饰器
@@ -1043,9 +1049,12 @@ def filter_string(self) -> str:
 例如：当 `resource_type="pod"` 返回 `PodFilter()`
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 7997fbb9e (chore: 新增观测场景容器文档)
+=======
+>>>>>>> 7e3107498 (chore: 更新文档)
 ## 资源类定义
 
 ### k8s.core.meta.FilterCollection(object)
