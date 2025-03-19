@@ -32,13 +32,17 @@ from monitor_web.k8s.core.meta import (
     K8sContainerMeta,
     K8sNamespaceMeta,
     K8sPodMeta,
+    K8sResourceMeta,
     K8sWorkloadMeta,
     NameSpace,
     load_resource_meta,
 )
 from monitor_web.k8s.resources import (
     GetResourceDetail,
+    GetScenarioMetric,
+    ListBCSCluster,
     ListK8SResources,
+    ScenarioMetricList,
     WorkloadOverview,
 )
 
@@ -566,15 +570,30 @@ class TestGetResourcesDetail(TestCase):
                     "value": "BCS-K8S-00000",
                 },
                 {"key": "name", "name": "集群名称", "type": "string", "value": ""},
-                {"key": "status", "name": "运行状态", "type": "string", "value": "RUNNING"},
+                {
+                    "key": "status",
+                    "name": "运行状态",
+                    "type": "string",
+                    "value": "RUNNING",
+                },
                 {
                     "key": "monitor_status",
                     "name": "采集状态",
                     "type": "status",
                     "value": {"type": "success", "text": "正常"},
                 },
-                {"key": "environment", "name": "环境", "type": "string", "value": "正式"},
-                {"key": "node_count", "name": "节点数量", "type": "number", "value": 18},
+                {
+                    "key": "environment",
+                    "name": "环境",
+                    "type": "string",
+                    "value": "正式",
+                },
+                {
+                    "key": "node_count",
+                    "name": "节点数量",
+                    "type": "number",
+                    "value": 18,
+                },
                 {
                     "key": "cpu_usage_ratio",
                     "name": "CPU使用率",
@@ -606,7 +625,12 @@ class TestGetResourcesDetail(TestCase):
                     "type": "string",
                     "value": age,
                 },
-                {"key": "project_name", "name": "所属项目", "type": "string", "value": ""},
+                {
+                    "key": "project_name",
+                    "name": "所属项目",
+                    "type": "string",
+                    "value": "",
+                },
                 {"key": "description", "name": "描述", "type": "string", "value": ""},
             ]
             self.assertEqual(expect_data, actual_data)
@@ -999,9 +1023,21 @@ class TestK8sListResources(TestCase):
                 {
                     "count": len(orm_resource + promql_resource[:1]),
                     "items": [
-                        {'bcs_cluster_id': 'BCS-K8S-00000', 'bk_biz_id': 2, 'namespace': 'apm-demo'},
-                        {'bcs_cluster_id': 'BCS-K8S-00000', 'bk_biz_id': 2, 'namespace': 'default'},
-                        {'bcs_cluster_id': 'BCS-K8S-00000', 'bk_biz_id': 2, 'namespace': 'blueking'},
+                        {
+                            "bcs_cluster_id": "BCS-K8S-00000",
+                            "bk_biz_id": 2,
+                            "namespace": "apm-demo",
+                        },
+                        {
+                            "bcs_cluster_id": "BCS-K8S-00000",
+                            "bk_biz_id": 2,
+                            "namespace": "default",
+                        },
+                        {
+                            "bcs_cluster_id": "BCS-K8S-00000",
+                            "bk_biz_id": 2,
+                            "namespace": "blueking",
+                        },
                     ],
                 },
             )
@@ -1096,8 +1132,16 @@ class TestK8sListResources(TestCase):
             ns_list = ListK8SResources()(validated_request_data)["items"]
             self.assertEqual(
                 [
-                    {'bk_biz_id': 2, 'bcs_cluster_id': 'BCS-K8S-00000', 'namespace': 'bkmonitor-operator'},
-                    {'bk_biz_id': 2, 'bcs_cluster_id': 'BCS-K8S-00000', 'namespace': 'blueking'},
+                    {
+                        "bk_biz_id": 2,
+                        "bcs_cluster_id": "BCS-K8S-00000",
+                        "namespace": "bkmonitor-operator",
+                    },
+                    {
+                        "bk_biz_id": 2,
+                        "bcs_cluster_id": "BCS-K8S-00000",
+                        "namespace": "blueking",
+                    },
                 ],
                 ns_list,
             )
@@ -1137,7 +1181,7 @@ class TestK8sListResources(TestCase):
         self.assertEqual(
             meta.meta_prom,
             "sum by (workload_kind, workload_name, namespace) "
-            '(rate(container_cpu_usage_seconds_total{'
+            "(rate(container_cpu_usage_seconds_total{"
             'bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m]))',
         )
         # orm_resource = (
@@ -1148,8 +1192,8 @@ class TestK8sListResources(TestCase):
         # 验证get_from_meta
         workload_list = ListK8SResources()(validated_request_data)
         expect_workload_list = [
-            {'workload': 'Deployment:bk-monitor-web'},
-            {'workload': 'Deployment:bk-monitor-web-worker'},
+            {"workload": "Deployment:bk-monitor-web"},
+            {"workload": "Deployment:bk-monitor-web-worker"},
         ]
         self.assertEqual(
             workload_list,
@@ -1212,9 +1256,12 @@ class TestK8sListResources(TestCase):
             validated_request_data["with_history"] = True
             workload_list = ListK8SResources()(validated_request_data)
             expect_workload_list = [
-                {'namespace': 'blueking', 'workload': 'Deployment:bk-monitor-web'},
-                {'namespace': 'blueking', 'workload': 'Deployment:bk-monitor-web-beat'},
-                {'namespace': 'blueking', 'workload': 'Deployment:bk-monitor-web-worker'},
+                {"namespace": "blueking", "workload": "Deployment:bk-monitor-web"},
+                {"namespace": "blueking", "workload": "Deployment:bk-monitor-web-beat"},
+                {
+                    "namespace": "blueking",
+                    "workload": "Deployment:bk-monitor-web-worker",
+                },
             ]
             self.assertEqual(
                 workload_list,
@@ -1261,7 +1308,7 @@ class TestK8sListResources(TestCase):
         self.assertEqual(
             meta.meta_prom,
             "sum by (workload_kind, workload_name, namespace, pod_name) "
-            '(rate(container_cpu_usage_seconds_total{'
+            "(rate(container_cpu_usage_seconds_total{"
             'bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m]))',
         )
 
@@ -1373,7 +1420,7 @@ class TestK8sListResources(TestCase):
         self.assertEqual(
             meta.meta_prom,
             (
-                'sum by (workload_kind, workload_name, namespace, container_name, pod_name) '
+                "sum by (workload_kind, workload_name, namespace, container_name, pod_name) "
                 '(rate(container_cpu_usage_seconds_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",'
                 'container_name!="POD"}[1m]))'
             ),
@@ -1387,7 +1434,7 @@ class TestK8sListResources(TestCase):
         )
         # 验证 get_from_meta
         contianer_list = ListK8SResources()(validated_request_data)
-        expect_container_list = [{'container': 'bk-monitor-web'}]
+        expect_container_list = [{"container": "bk-monitor-web"}]
         self.assertEqual(
             contianer_list,
             {"count": len(expect_container_list), "items": expect_container_list},
@@ -1412,7 +1459,7 @@ class TestK8sListResources(TestCase):
         self.assertEqual(
             meta.meta_prom,
             (
-                'sum by (workload_kind, workload_name, namespace, container_name, pod_name) '
+                "sum by (workload_kind, workload_name, namespace, container_name, pod_name) "
                 '(last_over_time(rate(container_cpu_usage_seconds_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",'
                 'container_name!="POD",namespace="blueking",workload_name="bk-monitor-web",'
                 'container_name=~"(monitor)"}[1m])[1m:]))'
@@ -1514,3 +1561,327 @@ class TestK8sListResources(TestCase):
         meta.set_agg_method(validated_request_data["method"])
         print(meta.meta_prom_with_container_cpu_usage_seconds_total)
         print(meta.meta_prom_by_sort("container_cpu_usage_seconds_total"))
+
+
+# TODO 待补充
+class TestListBCSCluster(TestCase):
+    databases = {"default", "monitor_api"}
+
+    def setUp(self):
+        """设置数据库初始化对象用"""
+        self.create_bcs_cluster()
+
+    def create_bcs_cluster(self):
+        BCSCluster(
+            bk_biz_id=2,
+            bcs_cluster_id="BCS-K8S-00000",
+            name="蓝鲸7.0",
+            area_name="",
+            project_name="",
+            environment="正式",
+            updated_at=timezone.now(),
+            node_count=18,
+            cpu_usage_ratio=19.22,
+            memory_usage_ratio=65.36,
+            disk_usage_ratio=51.45,
+            created_at=timezone.now(),
+            status="RUNNING",
+            monitor_status="success",
+            last_synced_at=timezone.now(),
+        ).save()
+
+    def test_list_bcs_cluster(self):
+        validated_request_data = {"bk_biz_id": 2}
+        bcs_cluster_list = ListBCSCluster()(validated_request_data)
+        self.assertEqual(
+            bcs_cluster_list,
+            [{"id": "BCS-K8S-00000", "name": "蓝鲸7.0(BCS-K8S-00000)"}],
+        )
+
+
+class TestScenarioMetricList(TestCase):
+    databases = {"default", "monitor_api"}
+
+    def test_with_performance(self):
+        validated_request_data = {
+            "bk_biz_id": 2,
+            "scenario": "performance",
+        }
+        metric_list = ScenarioMetricList()(validated_request_data)
+        self.assertEqual(
+            metric_list,
+            [
+                {
+                    "id": "CPU",
+                    "name": "CPU",
+                    "children": [
+                        {
+                            "id": "container_cpu_usage_seconds_total",
+                            "name": "CPU使用量",
+                            "unit": "core",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "kube_pod_cpu_requests_ratio",
+                            "name": "CPU request使用率",
+                            "unit": "percentunit",
+                            "unsupported_resource": ["namespace"],
+                        },
+                        {
+                            "id": "kube_pod_cpu_limits_ratio",
+                            "name": "CPU limit使用率",
+                            "unit": "percentunit",
+                            "unsupported_resource": ["namespace"],
+                        },
+                        {
+                            "id": "container_cpu_cfs_throttled_ratio",
+                            "name": "CPU 限流占比",
+                            "unit": "percentunit",
+                            "unsupported_resource": [],
+                        },
+                    ],
+                },
+                {
+                    "id": "memory",
+                    "name": "内存",
+                    "children": [
+                        {
+                            "id": "container_memory_working_set_bytes",
+                            "name": "内存使用量(Working Set)",
+                            "unit": "bytes",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "kube_pod_memory_requests_ratio",
+                            "name": "内存 request使用率",
+                            "unit": "percentunit",
+                            "unsupported_resource": ["namespace"],
+                        },
+                        {
+                            "id": "kube_pod_memory_limits_ratio",
+                            "name": "内存 limit使用率",
+                            "unit": "percentunit",
+                            "unsupported_resource": ["namespace"],
+                        },
+                    ],
+                },
+                {
+                    "id": "network",
+                    "name": "流量",
+                    "children": [
+                        {
+                            "id": "container_network_receive_bytes_total",
+                            "name": "网络入带宽",
+                            "unit": "Bps",
+                            "unsupported_resource": ["container"],
+                        },
+                        {
+                            "id": "container_network_transmit_bytes_total",
+                            "name": "网络出带宽",
+                            "unit": "Bps",
+                            "unsupported_resource": ["container"],
+                        },
+                    ],
+                },
+            ],
+        )
+
+    def test_with_network(self):
+        validated_request_data = {
+            "bk_biz_id": 2,
+            "scenario": "network",
+        }
+        metric_list = ScenarioMetricList()(validated_request_data)
+
+        self.assertEqual(
+            metric_list,
+            [
+                {
+                    "id": "traffic",
+                    "name": "流量",
+                    "children": [
+                        {
+                            "id": "nw_container_network_receive_bytes_total",
+                            "name": "网络入带宽",
+                            "unit": "Bps",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "nw_container_network_transmit_bytes_total",
+                            "name": "网络出带宽",
+                            "unit": "Bps",
+                            "unsupported_resource": [],
+                        },
+                    ],
+                },
+                {
+                    "id": "packets",
+                    "name": "包量",
+                    "children": [
+                        {
+                            "id": "nw_container_network_receive_packets_total",
+                            "name": "网络入包量",
+                            "unit": "pps",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "nw_container_network_transmit_packets_total",
+                            "name": "网络出包量",
+                            "unit": "pps",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "nw_container_network_receive_errors_total",
+                            "name": "网络入丢包量",
+                            "unit": "pps",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "nw_container_network_transmit_errors_total",
+                            "name": "网络出丢包量",
+                            "unit": "pps",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "nw_container_network_receive_errors_ratio",
+                            "name": "网络入丢包率",
+                            "unit": "percentunit",
+                            "unsupported_resource": [],
+                        },
+                        {
+                            "id": "nw_container_network_transmit_errors_ratio",
+                            "name": "网络出丢包率",
+                            "unit": "percentunit",
+                            "unsupported_resource": [],
+                        },
+                    ],
+                },
+            ],
+        )
+
+
+class TestResourceTrend(TestCase):
+    """
+    看是否需要根据不同的 resource_type 来写不同的测试用例
+    """
+
+    databases = {"default", "monitor_api"}
+
+    def test_resource_trend(self):
+        validated_request_data = {
+            "resource_list": ["aiops-default", "bcs-system"],
+            "scenario": "performance",
+            "bcs_cluster_id": "BCS-K8S-00000",
+            "start_time": 1742286763,
+            "end_time": 1742290363,
+            "filter_dict": {},
+            "column": "container_cpu_usage_seconds_total",
+            "method": "sum",
+            "resource_type": "namespace",
+            "bk_biz_id": 2,
+        }
+
+        # 校验1, 直接从请求参数进行校验
+        bk_biz_id = validated_request_data["bk_biz_id"]
+        bk_cluster_id = validated_request_data["bcs_cluster_id"]
+        resource_type = validated_request_data["resource_type"]
+        agg_method = validated_request_data["method"]
+        start_time = validated_request_data["start_time"]
+        end_time = validated_request_data["end_time"]
+        column = validated_request_data["column"]
+        scenario = validated_request_data["scenario"]
+        resource_list = validated_request_data["resource_list"]
+
+        meta: K8sResourceMeta = load_resource_meta(resource_type, bk_biz_id, bk_cluster_id)
+        self.assertIsInstance(meta, K8sNamespaceMeta)
+
+        # 构造promql
+        meta.set_agg_method(agg_method)  # agg_method -> sum
+        meta.set_agg_interval(start_time, end_time)  # agg_interval -> 1m
+        meta.filter.add(load_resource_filter(resource_type, resource_list))
+
+        # 校验 promql 指标
+        self.assertEqual(
+            getattr(meta, f"meta_prom_with_{column}"),
+            """sum by (namespace) (last_over_time(
+                rate(
+                    container_cpu_usage_seconds_total{
+                        bcs_cluster_id="BCS-K8S-40000",
+                        bk_biz_id="2",
+                        container_name!="POD",
+                        namespace=~"^(aiops-default|bcs-system)$"
+                    }[1m]
+                )[1m:]
+            ))""",
+        )
+
+        # 校验获取的指标
+        metric = GetScenarioMetric()({"metric_id": column, "scenario": scenario})
+        self.assertEqual(
+            metric,
+            {"unit": "core", "name": "CPU使用量", "id": "container_cpu_usage_seconds_total", "unsupported_resource": []},
+        )
+
+        # 校验2, 对最终的结果进行校验
+        query_result = [
+            {
+                "dimensions": {
+                    "bcs_cluster_id": "BCS-K8S-00000",
+                    "bk_biz_id": "2",
+                    "namespace": "aiops-default",
+                },
+                "target": "{bcs_cluster_id=BCS-K8S-00000, bk_biz_id=2, namespace=aiops-default}",
+                "metric_field": "_result_",
+                "datapoints": [
+                    [0.411495, 1742290260000],
+                ],
+                "alias": "_result_",
+                "type": "line",
+                "dimensions_translation": {},
+                "unit": "",
+            },
+            {
+                "dimensions": {
+                    "bcs_cluster_id": "BCS-K8S-00000",
+                    "bk_biz_id": "2",
+                    "namespace": "bcs-system",
+                },
+                "target": "{bcs_cluster_id=BCS-K8S-00000, bk_biz_id=2, namespace=bcs-system}",
+                "metric_field": "_result_",
+                "datapoints": [
+                    [4.490656, 1742290260000],
+                ],
+                "alias": "_result_",
+                "type": "line",
+                "dimensions_translation": {},
+                "unit": "",
+            },
+        ]
+        with mock.patch("core.drf_resource.resource.grafana.graph_unify_query") as mock_graph_unify_query:
+            mock_graph_unify_query.return_value = {"series": query_result}
+            self.assertEqual(
+                TestResourceTrend()(validated_request_data),
+                [
+                    {
+                        "resource_name": "aiops-default",
+                        "container_cpu_usage_seconds_total": {
+                            "datapoints": [[0.411495, 1742290260000]],
+                            "unit": "core",
+                            "value_title": "CPU使用量",
+                        },
+                    },
+                    {
+                        "resource_name": "bcs-system",
+                        "container_cpu_usage_seconds_total": {
+                            "datapoints": [[4.490656, 1742290260000]],
+                            "unit": "core",
+                            "value_title": "CPU使用量",
+                        },
+                    },
+                ],
+            )
+
+
+class TestNetwork(TestCase):
+    def setUp(self):
+        ...
