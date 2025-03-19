@@ -8,7 +8,8 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 """
-from typing import Dict, Optional
+
+from typing import Dict, Literal, Optional
 
 from django.db.models import F, Max, Value
 from django.db.models.functions import Concat
@@ -25,39 +26,45 @@ from bkmonitor.models import (
 )
 from bkmonitor.utils.time_tools import hms_string
 from core.drf_resource import resource
-from monitor_web.k8s.core.filters import load_resource_filter
+from monitor_web.k8s.core.filters import ResourceFilter, load_resource_filter
 
 
 class FilterCollection(object):
     """
+    用于管理多个过滤条件，支持添加和移除过滤器。它可以用于构建复杂的查询
     过滤查询集合
 
     内部过滤条件是一个字典， 可以通过 add、remove来添加过滤条件
     """
 
     def __init__(self, meta):
-        self.filters = dict()
-        self.meta = meta
-        self.query_set = meta.resource_class.objects.all().order_by("id")
+        self.filters: Dict[str, ResourceFilter] = dict()
+        self.meta: K8sResourceMeta = meta
+        self.query_set = meta.resource_class.objects.all().order_by("id")  # 初始化为所有相关的Kubernetes资源，按ID排序。
+
+        # 如果 meta 中指定了 only_fields，则在查询集中仅选择这些字段。
         if meta.only_fields:
             self.query_set = self.query_set.only(*self.meta.only_fields)
 
-    def add(self, filter_obj):
+    def add(self, filter_obj: ResourceFilter):
+        """将一个过滤器对象添加到 filters 字典中"""
         self.filters[filter_obj.filter_uid] = filter_obj
         return self
 
     def remove(self, filter_obj):
+        """移除指定的过滤器对象"""
         self.filters.pop(filter_obj.filter_uid, None)
         return self
 
     @cached_property
     def filter_queryset(self):
+        """通过遍历 filters 中的每个过滤器对象，应用过滤条件，最终返回过滤后的查询集"""
         for filter_obj in self.filters.values():
             self.query_set = self.query_set.filter(**self.transform_filter_dict(filter_obj))
         return self.query_set
 
     def transform_filter_dict(self, filter_obj) -> Dict:
-        """用于ORM的查询条件"""
+        """将过滤器对象的过滤条件转换为适合ORM查询的格式"""
         resource_type = filter_obj.resource_type
         resource_meta = load_resource_meta(resource_type, self.meta.bk_biz_id, self.meta.bcs_cluster_id)
         if not resource_meta:
@@ -78,7 +85,12 @@ class FilterCollection(object):
             orm_filter_dict[new_key] = value
         return orm_filter_dict
 
-    def filter_string(self, exclude=""):
+    def filter_string(self, exclude="") -> str:
+        """
+        生成一个过滤条件的字符串，供进一步查询使用。
+        如果 exclude 参数指定，则跳过以该参数开头的过滤器。
+        如果有多个 workload ID，则只取第一个进行查询。
+        """
         where_string_list = []
         for filter_type, filter_obj in self.filters.items():
             if exclude and filter_type.startswith(exclude):
@@ -96,6 +108,10 @@ class FilterCollection(object):
         return ",".join(where_string_list)
 
     def make_multi_workload_filter_string(self, workload_filters):
+        """
+        接收多个工作负载过滤器，并生成相应的过滤字符串。
+        在生成每个字符串时，将该过滤器添加到 filters 中，生成后再移除，以确保 filters 的状态不受影响。
+        """
         for workload_filter in workload_filters:
             self.filters[workload_filter.filter_uid] = workload_filter
             yield self.filter_string()
@@ -123,12 +139,12 @@ class K8sResourceMeta(object):
     k8s资源基类
     """
 
-    filter = None
+    filter: FilterCollection = None
     resource_field = ""
     resource_class = None
-    column_mapping = {}
-    only_fields = []
-    method = ""
+    column_mapping = {}  # 映射 Prometheus 字段到 ORM 字段的字典。 是吗？
+    only_fields = []  # 指定查询时只关注的字段。
+    method = ""  # 聚合方法（如 sum、avg 等）。
 
     @property
     def resource_field_list(self):
@@ -136,8 +152,9 @@ class K8sResourceMeta(object):
 
     def __init__(self, bk_biz_id, bcs_cluster_id):
         """
-        初始化时还会实例化一个 FilterCollection()
-        附带有 集群id和业务id信息
+        接收集群id 和 业务id
+        设置默认过滤器 FilterCollection()
+        初始化聚合间隔和方法
         """
         self.bk_biz_id = bk_biz_id
         self.bcs_cluster_id = bcs_cluster_id
@@ -146,7 +163,7 @@ class K8sResourceMeta(object):
         self.set_agg_method()
 
     def set_agg_interval(self, start_time, end_time):
-        """设置聚合查询的间隔"""
+        """根据不同的聚合方法（如 count、sum 等）设置聚合查询的时间间隔。"""
         if self.method == "count":
             # count表示数量 不用时间聚合
             self.agg_interval = ""
@@ -161,7 +178,10 @@ class K8sResourceMeta(object):
         agg_interval = hms_string(time_passed, upper=True)
         self.agg_interval = agg_interval
 
-    def set_agg_method(self, method="sum"):
+    def set_agg_method(self, method: Literal["max", "avg", "min", "sum", "count"] = "sum"):
+        """
+        设置聚合方法，并在方法为 count 时重置聚合间隔。
+        """
         self.method = method
         if method == "count":
             # 重置interval
@@ -169,8 +189,9 @@ class K8sResourceMeta(object):
 
     def setup_filter(self):
         """
-        启动过滤查询条件
-        默认添加 集群id 和业务id 两个过滤信息
+        初始化过滤条件
+        默认添加集群 ID 和业务 ID 的过滤器
+        并添加意为 排除POD 的过滤器。
         """
         if self.filter is not None:
             return
@@ -185,7 +206,7 @@ class K8sResourceMeta(object):
         """
         数据获取来源
 
-        从 meta 获取数据
+        从数据库获取数据
         """
         return self.filter.filter_queryset
 
@@ -197,10 +218,14 @@ class K8sResourceMeta(object):
     def get_from_promql(self, start_time, end_time, order_by="", page_size=20, method="sum"):
         """
         数据获取来源
+
+        查询历史数据
         """
         self.set_agg_method(method)
         interval = get_interval_number(start_time, end_time, interval=60)
         self.set_agg_interval(start_time, end_time)
+
+        # 构建查询参数
         query_params = {
             "bk_biz_id": self.bk_biz_id,
             "query_configs": [
@@ -255,11 +280,22 @@ class K8sResourceMeta(object):
         self.set_agg_method()
         return obj_list
 
-    def get_resource_name(self, series):
+    def get_resource_name(self, series) -> str:
+        """
+        遍历 self.resource_field_list 中的字段，从 series["dimensions"] 中获取相应的值。
+        将这些值用冒号 : 连接起来形成资源名称。
+        """
         meta_field_list = [series["dimensions"][field] for field in self.resource_field_list]
         return ":".join(meta_field_list)
 
     def clean_resource_obj(self, obj, series):
+        """
+        清理并更新资源对象的属性
+
+        根据 self.column_mapping 中的映射关系，将原始维度名称替换为目标名称。
+        更新对象的属性，并设置 bk_biz_id 和 bcs_cluster_id。
+        返回更新后的对象。
+        """
         dimensions = series["dimensions"]
         for origin, target in self.column_mapping.items():
             if origin in dimensions:
@@ -287,11 +323,15 @@ class K8sResourceMeta(object):
         raise NotImplementedError(f"metric: {order_field} not supported")
 
     @property
+<<<<<<< HEAD
     def meta_prom_with_node_boot_time_seconds(self):
         return self.tpl_prom_with_nothing("node_boot_time_seconds")
 
     @property
     def meta_prom_with_container_memory_working_set_bytes(self):
+=======
+    def meta_prom_with_container_memory_working_set_bytes(self) -> str:
+>>>>>>> 15a6ef509 (docs: 更新一些注释以及文档什么的)
         return self.tpl_prom_with_nothing("container_memory_working_set_bytes")
 
     @property
@@ -366,10 +406,10 @@ class K8sResourceMeta(object):
     def meta_prom_with_container_cpu_cfs_throttled_ratio(self):
         raise NotImplementedError("metric: [container_cpu_cfs_throttled_ratio] not supported")
 
-    def tpl_prom_with_rate(self, metric_name, exclude=""):
+    def tpl_prom_with_rate(self, metric_name, exclude="") -> str:
         raise NotImplementedError(f"metric: [{metric_name}] not supported")
 
-    def tpl_prom_with_nothing(self, metric_name, exclude=""):
+    def tpl_prom_with_nothing(self, metric_name, exclude="") -> str:
         raise NotImplementedError(f"metric: [{metric_name}] not supported")
 
     @property
@@ -384,7 +424,14 @@ class K8sPodMeta(K8sResourceMeta, NetworkWithRelation):
     resource_field = "pod_name"
     resource_class = BCSPod
     column_mapping = {"workload_kind": "workload_type", "pod_name": "name"}
-    only_fields = ["name", "namespace", "workload_type", "workload_name", "bk_biz_id", "bcs_cluster_id"]
+    only_fields = [
+        "name",
+        "namespace",
+        "workload_type",
+        "workload_name",
+        "bk_biz_id",
+        "bcs_cluster_id",
+    ]
 
     def nw_tpl_prom_with_rate(self, metric_name, exclude=""):
         pod_filters = FilterCollection(self)
@@ -454,7 +501,7 @@ class K8sPodMeta(K8sResourceMeta, NetworkWithRelation):
     def meta_prom_with_kube_pod_cpu_requests_ratio(self):
         promql = (
             self.meta_prom_with_container_cpu_usage_seconds_total
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace,pod_name)
     (count by (workload_kind, workload_name, pod_name, namespace) (
         container_cpu_system_seconds_total{{{self.filter.filter_string()}}}
@@ -471,7 +518,7 @@ class K8sPodMeta(K8sResourceMeta, NetworkWithRelation):
     def meta_prom_with_kube_pod_cpu_limits_ratio(self):
         promql = (
             self.meta_prom_with_container_cpu_usage_seconds_total
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace,pod_name)
     (count by (workload_kind, workload_name, pod_name, namespace) (
         container_cpu_system_seconds_total{{{self.filter.filter_string()}}}
@@ -488,7 +535,7 @@ class K8sPodMeta(K8sResourceMeta, NetworkWithRelation):
     def meta_prom_with_kube_pod_memory_requests_ratio(self):
         promql = (
             self.meta_prom_with_container_memory_working_set_bytes
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace,pod_name)
     (count by (workload_kind, workload_name, pod_name, namespace) (
         container_memory_working_set_bytes{{{self.filter.filter_string()}}}
@@ -505,7 +552,7 @@ class K8sPodMeta(K8sResourceMeta, NetworkWithRelation):
     def meta_prom_with_kube_pod_memory_limits_ratio(self):
         promql = (
             self.meta_prom_with_container_memory_working_set_bytes
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace,pod_name)
     (count by (workload_kind, workload_name, pod_name, namespace) (
         container_memory_working_set_bytes{{{self.filter.filter_string()}}}
@@ -527,6 +574,11 @@ class K8sNodeMeta(K8sResourceMeta):
 
 
 class NameSpaceQuerySet(list):
+    """
+    模仿 Django 的风格
+    实现 count 和 order_by 方法
+    """
+
     def count(self):
         return len(self)
 
@@ -539,7 +591,7 @@ class NameSpaceQuerySet(list):
             key = []
             for field in field_names:
                 # 检查是否为降序字段
-                if field.startswith('-'):
+                if field.startswith("-"):
                     field_name = field[1:]
                     # 使用负值来反转排序
                     key.append(-item.get(field_name, 0))
@@ -572,6 +624,12 @@ class NameSpace(dict):
         self[item] = value
 
     def __call__(self, **kwargs):
+        """
+        它创建一个新的 NameSpace 实例，
+        使用 columns 中的键初始化为 None，
+        然后用 kwargs 中的值更新这个实例，
+        最后返回这个新的命名空间实例。
+        """
         ns = NameSpace.fromkeys(NameSpace.columns, None)
         ns.update(kwargs)
         return ns
@@ -737,7 +795,7 @@ class K8sWorkloadMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_cpu_requests_ratio(self):
         promql = (
             self.meta_prom_with_container_cpu_usage_seconds_total
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace)
     (count by (workload_kind, workload_name, namespace, pod_name) (
         container_cpu_usage_seconds_total{{{self.filter.filter_string()}}}
@@ -754,7 +812,7 @@ class K8sWorkloadMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_cpu_limits_ratio(self):
         promql = (
             self.meta_prom_with_container_cpu_usage_seconds_total
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace)
     (count by (workload_kind, workload_name, namespace, pod_name) (
         container_cpu_usage_seconds_total{{{self.filter.filter_string()}}}
@@ -771,7 +829,7 @@ class K8sWorkloadMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_memory_requests_ratio(self):
         promql = (
             self.meta_prom_with_container_memory_working_set_bytes
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace)
     (count by (workload_kind, workload_name, pod_name, namespace) (
         container_memory_working_set_bytes{{{self.filter.filter_string()}}}
@@ -788,7 +846,7 @@ class K8sWorkloadMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_memory_limits_ratio(self):
         promql = (
             self.meta_prom_with_container_memory_working_set_bytes
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace)
     (count by (workload_kind, workload_name, pod_name, namespace) (
         container_memory_working_set_bytes{{{self.filter.filter_string()}}}
@@ -804,7 +862,7 @@ class K8sWorkloadMeta(K8sResourceMeta):
     @classmethod
     def distinct(cls, queryset):
         query_set = (
-            queryset.values('type', "name")
+            queryset.values("type", "name")
             .order_by("name")
             .annotate(
                 distinct_name=Max("id"),
@@ -819,7 +877,15 @@ class K8sContainerMeta(K8sResourceMeta):
     resource_field = "container_name"
     resource_class = BCSContainer
     column_mapping = {"workload_kind": "workload_type", "container_name": "name"}
-    only_fields = ["name", "namespace", "pod_name", "workload_type", "workload_name", "bk_biz_id", "bcs_cluster_id"]
+    only_fields = [
+        "name",
+        "namespace",
+        "pod_name",
+        "workload_type",
+        "workload_name",
+        "bk_biz_id",
+        "bcs_cluster_id",
+    ]
 
     @property
     def resource_field_list(self):
@@ -828,8 +894,8 @@ class K8sContainerMeta(K8sResourceMeta):
     @classmethod
     def distinct(cls, queryset):
         query_set = (
-            queryset.values('name')
-            .order_by('name')
+            queryset.values("name")
+            .order_by("name")
             .annotate(distinct_name=Max("id"))
             .annotate(container=F("name"))
             .values("container")
@@ -881,7 +947,7 @@ class K8sContainerMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_cpu_requests_ratio(self):
         promql = (
             self.meta_prom_with_container_cpu_usage_seconds_total
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace, pod_name, container_name)
     (count by (workload_kind, workload_name, pod_name, namespace, container_name) (
         container_cpu_usage_seconds_total{{{self.filter.filter_string()}}}
@@ -898,7 +964,7 @@ class K8sContainerMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_cpu_limits_ratio(self):
         promql = (
             self.meta_prom_with_container_cpu_usage_seconds_total
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace, pod_name, container_name)
     (count by (workload_kind, workload_name, pod_name, namespace, container_name) (
         container_cpu_usage_seconds_total{{{self.filter.filter_string()}}}
@@ -915,7 +981,7 @@ class K8sContainerMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_memory_requests_ratio(self):
         promql = (
             self.meta_prom_with_container_memory_working_set_bytes
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace, pod_name, container_name)
     (count by (workload_kind, workload_name, pod_name, namespace, container_name) (
         container_memory_working_set_bytes{{{self.filter.filter_string()}}}
@@ -932,7 +998,7 @@ class K8sContainerMeta(K8sResourceMeta):
     def meta_prom_with_kube_pod_memory_limits_ratio(self):
         promql = (
             self.meta_prom_with_container_memory_working_set_bytes
-            + '/ '
+            + "/ "
             + f"""(sum by (workload_kind, workload_name, namespace, pod_name, container_name)
     (count by (workload_kind, workload_name, pod_name, namespace, container_name) (
         container_memory_working_set_bytes{{{self.filter.filter_string()}}}
@@ -946,8 +1012,15 @@ class K8sContainerMeta(K8sResourceMeta):
         return promql
 
 
-def load_resource_meta(resource_type: str, bk_biz_id: int, bcs_cluster_id: str) -> Optional[K8sResourceMeta]:
-    resource_meta_map = {
+def load_resource_meta(
+    resource_type: Literal["pod", "workload", "namespace", "container"],
+    bk_biz_id: int,
+    bcs_cluster_id: str,
+) -> Optional[K8sResourceMeta]:
+    """
+    根据给定的资源类型和其他必要的参数加载相应的 Kubernetes 资源元信息类的实例。
+    ```python
+    {
         'node': K8sNodeMeta,
         'container': K8sContainerMeta,
         'container_name': K8sContainerMeta,
@@ -955,8 +1028,19 @@ def load_resource_meta(resource_type: str, bk_biz_id: int, bcs_cluster_id: str) 
         'pod_name': K8sPodMeta,
         'workload': K8sWorkloadMeta,
         'namespace': K8sNamespaceMeta,
-        'ingress': K8sIngressMeta,
-        'service': K8sServiceMeta,
+    }
+    ```
+    """
+    resource_meta_map = {
+        "node": K8sNodeMeta,
+        "container": K8sContainerMeta,
+        "container_name": K8sContainerMeta,
+        "pod": K8sPodMeta,
+        "pod_name": K8sPodMeta,
+        "workload": K8sWorkloadMeta,
+        "namespace": K8sNamespaceMeta,
+        "ingress": K8sIngressMeta,
+        "service": K8sServiceMeta,
     }
     if resource_type not in resource_meta_map:
         return None

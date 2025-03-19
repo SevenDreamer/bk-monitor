@@ -20,7 +20,7 @@ k8s 性能场景配置, 初版
 
 
 # 每个场景需要配置一个 get_metrics函数 以返回指标列表
-def get_metrics() -> List:
+def get_metrics() -> List[Category]:
     return [
         Category(
             id="CPU",
