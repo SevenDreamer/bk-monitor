@@ -40,9 +40,7 @@ from monitor_web.k8s.core.meta import (
 from monitor_web.k8s.resources import (
     GetResourceDetail,
     GetScenarioMetric,
-    ListBCSCluster,
     ListK8SResources,
-    ScenarioMetricList,
     WorkloadOverview,
 )
 
@@ -148,6 +146,12 @@ class TestGetResourcesDetail(TestCase):
     databases = {"default", "monitor_api"}
 
     def setUp(self):
+        self.create_pods()
+        self.create_workloads()
+        self.create_containers()
+        self.create_cluster()
+
+    def create_pods(self):
         BCSPod(
             bk_biz_id=2,
             bcs_cluster_id="BCS-K8S-00000",
@@ -171,6 +175,8 @@ class TestGetResourcesDetail(TestCase):
             limit_memory_usage_ratio=54.98,
             status="Running",
         ).save()
+
+    def create_workloads(self):
         BCSWorkload(
             bk_biz_id=2,
             bcs_cluster_id="BCS-K8S-00000",
@@ -185,6 +191,8 @@ class TestGetResourcesDetail(TestCase):
             monitor_status="success",
             status="success",
         ).save()
+
+    def create_containers(self):
         BCSContainer(
             bk_biz_id=2,
             bcs_cluster_id="BCS-K8S-00000",
@@ -201,6 +209,8 @@ class TestGetResourcesDetail(TestCase):
             created_at=timezone.now(),
             last_synced_at=timezone.now(),
         ).save()
+
+    def create_cluster(self):
         BCSCluster(
             bk_biz_id=2,
             bcs_cluster_id="BCS-K8S-00000",
@@ -380,6 +390,12 @@ class TestGetResourcesDetail(TestCase):
             },
             {"key": "label_list", "name": "标签", "type": "kv", "value": []},
             {"key": "images", "name": "镜像", "type": "list", "value": [""]},
+            {
+                "key": "ingress_service_relation",
+                "name": "ingress/service关联",
+                "type": "list",
+                "value": [],
+            },
         ]
 
         self.assertEqual(result, expect_data)
@@ -1563,203 +1579,6 @@ class TestK8sListResources(TestCase):
         print(meta.meta_prom_by_sort("container_cpu_usage_seconds_total"))
 
 
-# TODO 待补充
-class TestListBCSCluster(TestCase):
-    databases = {"default", "monitor_api"}
-
-    def setUp(self):
-        """设置数据库初始化对象用"""
-        self.create_bcs_cluster()
-
-    def create_bcs_cluster(self):
-        BCSCluster(
-            bk_biz_id=2,
-            bcs_cluster_id="BCS-K8S-00000",
-            name="蓝鲸7.0",
-            area_name="",
-            project_name="",
-            environment="正式",
-            updated_at=timezone.now(),
-            node_count=18,
-            cpu_usage_ratio=19.22,
-            memory_usage_ratio=65.36,
-            disk_usage_ratio=51.45,
-            created_at=timezone.now(),
-            status="RUNNING",
-            monitor_status="success",
-            last_synced_at=timezone.now(),
-        ).save()
-
-    def test_list_bcs_cluster(self):
-        validated_request_data = {"bk_biz_id": 2}
-        bcs_cluster_list = ListBCSCluster()(validated_request_data)
-        self.assertEqual(
-            bcs_cluster_list,
-            [{"id": "BCS-K8S-00000", "name": "蓝鲸7.0(BCS-K8S-00000)"}],
-        )
-
-
-class TestScenarioMetricList(TestCase):
-    databases = {"default", "monitor_api"}
-
-    def test_with_performance(self):
-        validated_request_data = {
-            "bk_biz_id": 2,
-            "scenario": "performance",
-        }
-        metric_list = ScenarioMetricList()(validated_request_data)
-        self.assertEqual(
-            metric_list,
-            [
-                {
-                    "id": "CPU",
-                    "name": "CPU",
-                    "children": [
-                        {
-                            "id": "container_cpu_usage_seconds_total",
-                            "name": "CPU使用量",
-                            "unit": "core",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "kube_pod_cpu_requests_ratio",
-                            "name": "CPU request使用率",
-                            "unit": "percentunit",
-                            "unsupported_resource": ["namespace"],
-                        },
-                        {
-                            "id": "kube_pod_cpu_limits_ratio",
-                            "name": "CPU limit使用率",
-                            "unit": "percentunit",
-                            "unsupported_resource": ["namespace"],
-                        },
-                        {
-                            "id": "container_cpu_cfs_throttled_ratio",
-                            "name": "CPU 限流占比",
-                            "unit": "percentunit",
-                            "unsupported_resource": [],
-                        },
-                    ],
-                },
-                {
-                    "id": "memory",
-                    "name": "内存",
-                    "children": [
-                        {
-                            "id": "container_memory_working_set_bytes",
-                            "name": "内存使用量(Working Set)",
-                            "unit": "bytes",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "kube_pod_memory_requests_ratio",
-                            "name": "内存 request使用率",
-                            "unit": "percentunit",
-                            "unsupported_resource": ["namespace"],
-                        },
-                        {
-                            "id": "kube_pod_memory_limits_ratio",
-                            "name": "内存 limit使用率",
-                            "unit": "percentunit",
-                            "unsupported_resource": ["namespace"],
-                        },
-                    ],
-                },
-                {
-                    "id": "network",
-                    "name": "流量",
-                    "children": [
-                        {
-                            "id": "container_network_receive_bytes_total",
-                            "name": "网络入带宽",
-                            "unit": "Bps",
-                            "unsupported_resource": ["container"],
-                        },
-                        {
-                            "id": "container_network_transmit_bytes_total",
-                            "name": "网络出带宽",
-                            "unit": "Bps",
-                            "unsupported_resource": ["container"],
-                        },
-                    ],
-                },
-            ],
-        )
-
-    def test_with_network(self):
-        validated_request_data = {
-            "bk_biz_id": 2,
-            "scenario": "network",
-        }
-        metric_list = ScenarioMetricList()(validated_request_data)
-
-        self.assertEqual(
-            metric_list,
-            [
-                {
-                    "id": "traffic",
-                    "name": "流量",
-                    "children": [
-                        {
-                            "id": "nw_container_network_receive_bytes_total",
-                            "name": "网络入带宽",
-                            "unit": "Bps",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "nw_container_network_transmit_bytes_total",
-                            "name": "网络出带宽",
-                            "unit": "Bps",
-                            "unsupported_resource": [],
-                        },
-                    ],
-                },
-                {
-                    "id": "packets",
-                    "name": "包量",
-                    "children": [
-                        {
-                            "id": "nw_container_network_receive_packets_total",
-                            "name": "网络入包量",
-                            "unit": "pps",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "nw_container_network_transmit_packets_total",
-                            "name": "网络出包量",
-                            "unit": "pps",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "nw_container_network_receive_errors_total",
-                            "name": "网络入丢包量",
-                            "unit": "pps",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "nw_container_network_transmit_errors_total",
-                            "name": "网络出丢包量",
-                            "unit": "pps",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "nw_container_network_receive_errors_ratio",
-                            "name": "网络入丢包率",
-                            "unit": "percentunit",
-                            "unsupported_resource": [],
-                        },
-                        {
-                            "id": "nw_container_network_transmit_errors_ratio",
-                            "name": "网络出丢包率",
-                            "unit": "percentunit",
-                            "unsupported_resource": [],
-                        },
-                    ],
-                },
-            ],
-        )
-
-
 class TestResourceTrend(TestCase):
     """
     看是否需要根据不同的 resource_type 来写不同的测试用例
@@ -1819,7 +1638,12 @@ class TestResourceTrend(TestCase):
         metric = GetScenarioMetric()({"metric_id": column, "scenario": scenario})
         self.assertEqual(
             metric,
-            {"unit": "core", "name": "CPU使用量", "id": "container_cpu_usage_seconds_total", "unsupported_resource": []},
+            {
+                "unit": "core",
+                "name": "CPU使用量",
+                "id": "container_cpu_usage_seconds_total",
+                "unsupported_resource": [],
+            },
         )
 
         # 校验2, 对最终的结果进行校验
@@ -1880,8 +1704,3 @@ class TestResourceTrend(TestCase):
                     },
                 ],
             )
-
-
-class TestNetwork(TestCase):
-    def setUp(self):
-        ...
