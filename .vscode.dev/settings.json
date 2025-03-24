@@ -1,0 +1,21 @@
+{
+    "markdownlint.config": {
+        "MD024": true
+    },
+    "python.analysis.extraPaths": [
+        "bkmonitor/packages",
+        "bkmonitor"
+    ],
+
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "-vv",
+        "-s",
+        "--reuse-db",
+        // "--rootdir=bkmonitor",
+        "${workspaceFolder}/bkmonitor/packages/monitor_web/tests/new_k8s"
+    ],
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.testing.cwd": "${workspaceFolder}/bkmonitor"
+}
