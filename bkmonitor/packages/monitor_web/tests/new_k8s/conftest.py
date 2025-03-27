@@ -10,6 +10,9 @@ specific language governing permissions and limitations under the License.
 """
 
 
+import re
+from typing import List
+
 import pytest
 from django.test import TestCase
 from django.utils import timezone
@@ -182,3 +185,28 @@ def craete_containers():
         created_at=timezone.now(),
         last_synced_at=timezone.now(),
     ).save()
+
+
+class BaseMetaPromQL:
+    @staticmethod
+    def build_argvalues(columns, promqls, promqls_with_interval) -> List[pytest.param]:
+        argvalues = []
+
+        for column, promql, promql_with_interval in zip(columns, promqls, promqls_with_interval):
+            argvalues.append(pytest.param(column, promql, promql_with_interval, id=f"{column}"))
+
+        return argvalues
+
+    @staticmethod
+    def build_argnames() -> List[str]:
+        return ["column", "promql", "promql_with_interval"]
+
+    def assert_meta_promql(self, meta, column, promql, promql_with_interval):
+        assert hasattr(meta, f"meta_prom_with_{column}")
+        result_promql: str = getattr(meta, f"meta_prom_with_{column}")
+        assert re.sub(r'\n\s+', ' ', result_promql.strip()) == re.sub(r'\n\s+', ' ', promql.strip())
+
+        # 判断带有时间间隔的 promql 语句
+        meta.set_agg_interval(1669939200, 1669942800)
+        result_promql: str = getattr(meta, f"meta_prom_with_{column}")
+        assert re.sub(r'\n\s+', ' ', result_promql.strip()) == re.sub(r'\n\s+', ' ', promql_with_interval.strip())
