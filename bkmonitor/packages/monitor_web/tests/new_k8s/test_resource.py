@@ -9,6 +9,8 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 """
 
+from typing import List
+
 import pytest
 
 from monitor_web.k8s.resources import (
@@ -19,149 +21,149 @@ from monitor_web.k8s.resources import (
 
 
 class TestGetScenarioMetric:
-    @pytest.mark.parametrize(
-        ["scenario", "metric_id", "name", "unit", "unsupported_resource"],
-        [
-            # performance
-            pytest.param(
-                "performance",
-                "container_cpu_usage_seconds_total",
-                "CPU使用量",
-                "core",
-                [],
-                id="container_cpu_usage_seconds_total",
-            ),
-            pytest.param(
-                "performance",
-                "kube_pod_cpu_requests_ratio",
-                "CPU request使用率",
-                "percentunit",
-                ["namespace"],
-                id="kube_pod_cpu_requests_ratio",
-            ),
-            pytest.param(
-                "performance",
-                "kube_pod_cpu_limits_ratio",
-                "CPU limit使用率",
-                "percentunit",
-                ["namespace"],
-                id="kube_pod_cpu_limits_ratio",
-            ),
-            pytest.param(
-                "performance",
-                "container_cpu_cfs_throttled_ratio",
-                "CPU 限流占比",
-                "percentunit",
-                [],
-                id="container_cpu_cfs_throttled_ratio",
-            ),
-            pytest.param(
-                "performance",
-                "container_memory_working_set_bytes",
-                "内存使用量(Working Set)",
-                "bytes",
-                [],
-                id="container_memory_working_set_bytes",
-            ),
-            pytest.param(
-                "performance",
-                "kube_pod_memory_requests_ratio",
-                "内存 request使用率",
-                "percentunit",
-                ["namespace"],
-                id="kube_pod_memory_requests_ratio",
-            ),
-            pytest.param(
-                "performance",
-                "kube_pod_memory_limits_ratio",
-                "内存 limit使用率",
-                "percentunit",
-                ["namespace"],
-                id="kube_pod_memory_limits_ratio",
-            ),
-            pytest.param(
-                "performance",
-                "container_network_receive_bytes_total",
-                "网络入带宽",
-                "Bps",
-                ["container"],
-                id="container_network_receive_bytes_total",
-            ),
-            pytest.param(
-                "performance",
-                "container_network_transmit_bytes_total",
-                "网络出带宽",
-                "Bps",
-                ["container"],
-                id="container_network_transmit_bytes_total",
-            ),
-            # network
-            pytest.param(
-                "network",
-                "nw_container_network_receive_bytes_total",
-                "网络入带宽",
-                "Bps",
-                [],
-                id="nw_container_network_receive_bytes_total",
-            ),
-            pytest.param(
-                "network",
-                "nw_container_network_transmit_bytes_total",
-                "网络出带宽",
-                "Bps",
-                [],
-                id="nw_container_network_transmit_bytes_total",
-            ),
-            pytest.param(
-                "network",
-                "nw_container_network_receive_packets_total",
-                "网络入包量",
-                "pps",
-                [],
-                id="nw_container_network_receive_packets_total",
-            ),
-            pytest.param(
-                "network",
-                "nw_container_network_transmit_packets_total",
-                "网络出包量",
-                "pps",
-                [],
-                id="nw_container_network_transmit_packets_total",
-            ),
-            pytest.param(
-                "network",
-                "nw_container_network_receive_errors_total",
-                "网络入丢包量",
-                "pps",
-                [],
-                id="nw_container_network_receive_errors_total",
-            ),
-            pytest.param(
-                "network",
-                "nw_container_network_transmit_errors_total",
-                "网络出丢包量",
-                "pps",
-                [],
-                id="nw_container_network_transmit_errors_total",
-            ),
-            pytest.param(
-                "network",
-                "nw_container_network_receive_errors_ratio",
-                "网络入丢包率",
-                "percentunit",
-                [],
-                id="nw_container_network_receive_errors_ratio",
-            ),
-            pytest.param(
-                "network",
-                "nw_container_network_transmit_errors_ratio",
-                "网络出丢包率",
-                "percentunit",
-                [],
-                id="nw_container_network_transmit_errors_ratio",
-            ),
-        ],
-    )
+    argnames: List[str] = ["scenario", "metric_id", "name", "unit", "unsupported_resource"]
+    argvalues: List[pytest.param] = [
+        # performance
+        pytest.param(
+            "performance",
+            "container_cpu_usage_seconds_total",
+            "CPU使用量",
+            "core",
+            [],
+            id="container_cpu_usage_seconds_total",
+        ),
+        pytest.param(
+            "performance",
+            "kube_pod_cpu_requests_ratio",
+            "CPU request使用率",
+            "percentunit",
+            ["namespace"],
+            id="kube_pod_cpu_requests_ratio",
+        ),
+        pytest.param(
+            "performance",
+            "kube_pod_cpu_limits_ratio",
+            "CPU limit使用率",
+            "percentunit",
+            ["namespace"],
+            id="kube_pod_cpu_limits_ratio",
+        ),
+        pytest.param(
+            "performance",
+            "container_cpu_cfs_throttled_ratio",
+            "CPU 限流占比",
+            "percentunit",
+            [],
+            id="container_cpu_cfs_throttled_ratio",
+        ),
+        pytest.param(
+            "performance",
+            "container_memory_working_set_bytes",
+            "内存使用量(Working Set)",
+            "bytes",
+            [],
+            id="container_memory_working_set_bytes",
+        ),
+        pytest.param(
+            "performance",
+            "kube_pod_memory_requests_ratio",
+            "内存 request使用率",
+            "percentunit",
+            ["namespace"],
+            id="kube_pod_memory_requests_ratio",
+        ),
+        pytest.param(
+            "performance",
+            "kube_pod_memory_limits_ratio",
+            "内存 limit使用率",
+            "percentunit",
+            ["namespace"],
+            id="kube_pod_memory_limits_ratio",
+        ),
+        pytest.param(
+            "performance",
+            "container_network_receive_bytes_total",
+            "网络入带宽",
+            "Bps",
+            ["container"],
+            id="container_network_receive_bytes_total",
+        ),
+        pytest.param(
+            "performance",
+            "container_network_transmit_bytes_total",
+            "网络出带宽",
+            "Bps",
+            ["container"],
+            id="container_network_transmit_bytes_total",
+        ),
+        # network
+        pytest.param(
+            "network",
+            "nw_container_network_receive_bytes_total",
+            "网络入带宽",
+            "Bps",
+            [],
+            id="nw_container_network_receive_bytes_total",
+        ),
+        pytest.param(
+            "network",
+            "nw_container_network_transmit_bytes_total",
+            "网络出带宽",
+            "Bps",
+            [],
+            id="nw_container_network_transmit_bytes_total",
+        ),
+        pytest.param(
+            "network",
+            "nw_container_network_receive_packets_total",
+            "网络入包量",
+            "pps",
+            [],
+            id="nw_container_network_receive_packets_total",
+        ),
+        pytest.param(
+            "network",
+            "nw_container_network_transmit_packets_total",
+            "网络出包量",
+            "pps",
+            [],
+            id="nw_container_network_transmit_packets_total",
+        ),
+        pytest.param(
+            "network",
+            "nw_container_network_receive_errors_total",
+            "网络入丢包量",
+            "pps",
+            [],
+            id="nw_container_network_receive_errors_total",
+        ),
+        pytest.param(
+            "network",
+            "nw_container_network_transmit_errors_total",
+            "网络出丢包量",
+            "pps",
+            [],
+            id="nw_container_network_transmit_errors_total",
+        ),
+        pytest.param(
+            "network",
+            "nw_container_network_receive_errors_ratio",
+            "网络入丢包率",
+            "percentunit",
+            [],
+            id="nw_container_network_receive_errors_ratio",
+        ),
+        pytest.param(
+            "network",
+            "nw_container_network_transmit_errors_ratio",
+            "网络出丢包率",
+            "percentunit",
+            [],
+            id="nw_container_network_transmit_errors_ratio",
+        ),
+    ]
+
+    @pytest.mark.parametrize(argnames, argvalues)
     def test_with_metric(self, scenario, metric_id, name, unit, unsupported_resource):
         validated_request_data = {
             "bk_biz_id": 2,

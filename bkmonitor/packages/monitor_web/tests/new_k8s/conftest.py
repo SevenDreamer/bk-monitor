@@ -14,7 +14,8 @@ import pytest
 from django.test import TestCase
 from django.utils import timezone
 
-from bkmonitor.models import BCSCluster
+from bkmonitor.models import BCSCluster, BCSContainer, BCSPod, BCSWorkload
+from monitor_web.tests.new_k8s.test_resource import TestGetScenarioMetric
 
 pytestsmark = pytest.mark.django_db
 
@@ -40,5 +41,144 @@ def create_bcs_cluster(db):
         created_at=timezone.now(),
         status="RUNNING",
         monitor_status="success",
+        last_synced_at=timezone.now(),
+    ).save()
+
+
+@pytest.fixture()
+def ensure_test_get_scenario_metric():
+    test_instance = TestGetScenarioMetric()
+    params = {k: v for k, v in zip(test_instance.argnames, test_instance.argvalues[0].values)}
+    test_instance.test_with_metric(**params)
+
+
+@pytest.fixture()
+def create_workloads():
+    BCSWorkload(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        namespace="blueking",
+        type="Deployment",
+        name="bk-monitor-web",
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+        pod_count=0,
+    ).save()
+    BCSWorkload(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        namespace="default",
+        type="Deployment",
+        name="demo",
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+        pod_count=0,
+    ).save()
+    BCSWorkload(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        namespace="blueking",
+        type="Deployment",
+        name="bk-monitor-web-worker",
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+        pod_count=0,
+    ).save()
+
+
+@pytest.fixture()
+def create_pods():
+    BCSPod(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        namespace="blueking",
+        name="bk-monitor-web-worker-784b79c9f-s9fhh",
+        node_name="node-127-0-0-1",
+        node_ip="127.0.0.1",
+        workload_type="Deployment",
+        workload_name="bk-monitor-web-worker",
+        total_container_count=1,
+        ready_container_count=1,
+        pod_ip="127.0.0.1",
+        restarts=0,
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+    ).save()
+    BCSPod(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        namespace="default",
+        name="bk-monitor-web-worker-784b79c9f-8lw9j",
+        node_name="node-127-0-0-1",
+        node_ip="127.0.0.1",
+        workload_type="Deployment",
+        workload_name="bk-monitor-web-worker",
+        total_container_count=1,
+        ready_container_count=1,
+        pod_ip="127.0.0.1",
+        restarts=0,
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+    ).save()
+    BCSPod(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        namespace="blueking",
+        name="bk-monitor-web-worker-resource-557cd688bd-c2q2c",
+        node_name="node-127-0-0-1",
+        node_ip="127.0.0.1",
+        workload_type="Deployment",
+        workload_name="bk-monitor-web-worker-resource",
+        total_container_count=1,
+        ready_container_count=1,
+        pod_ip="127.0.0.1",
+        restarts=0,
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+    ).save()
+
+
+@pytest.fixture()
+def craete_containers():
+    BCSContainer(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        name="bk-monitor-web",
+        namespace="blueking",
+        pod_name="bk-monitor-web-579f6bf4bc-nmld9",
+        workload_type="Deployment",
+        workload_name="bk-monitor-web",
+        node_ip="127.0.0.1",
+        node_name="node-127-0-0-1",
+        image="mirrors.tencent.com/build/blueking/bk-monitor:3.10.0-alpha.335",
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+    ).save()
+    BCSContainer(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        name="bk-monitor-web",
+        namespace="blueking",
+        pod_name="bk-monitor-web-579f6bf4bc-qhmxk",
+        workload_type="Deployment",
+        workload_name="bk-monitor-web",
+        node_ip="127.0.0.1",
+        node_name="node-127-0-0-1",
+        image="mirrors.tencent.com/build/blueking/bk-monitor:3.10.0-alpha.335",
+        created_at=timezone.now(),
+        last_synced_at=timezone.now(),
+    ).save()
+    BCSContainer(
+        bk_biz_id=2,
+        bcs_cluster_id="BCS-K8S-00000",
+        name="bk-monitor-web",
+        namespace="blueking",
+        pod_name="bk-monitor-web-579f6bf4bc-qrzxv",
+        workload_type="Deployment",
+        workload_name="bk-monitor-web",
+        node_ip="127.0.0.1",
+        node_name="node-127-0-0-1",
+        image="mirrors.tencent.com/build/blueking/bk-monitor:3.10.0-alpha.335",
+        created_at=timezone.now(),
         last_synced_at=timezone.now(),
     ).save()
