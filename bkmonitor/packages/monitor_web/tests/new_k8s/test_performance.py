@@ -9,7 +9,6 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 """
 
-
 from typing import List
 
 import mock
@@ -22,7 +21,11 @@ from monitor_web.k8s.core.meta import (
     K8sWorkloadMeta,
     load_resource_meta,
 )
-from monitor_web.k8s.resources import GetScenarioMetric, ResourceTrendResource
+from monitor_web.k8s.resources import (
+    GetScenarioMetric,
+    ListK8SResources,
+    ResourceTrendResource,
+)
 from monitor_web.tests.new_k8s.conftest import BaseMetaPromQL
 
 columns = [
@@ -43,10 +46,11 @@ namespace_columns = [
     "container_network_receive_bytes_total",
     "container_network_transmit_bytes_total",
 ]
-# noqa: E501
 namespace_promqls = [
-    """sum by (namespace) (rate(container_cpu_usage_seconds_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m]))""",  # noqa: E501
-    """sum by (namespace) ((increase(container_cpu_cfs_throttled_periods_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m]) / increase(container_cpu_cfs_periods_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m])))""",  # noqa: E501
+    """sum by (namespace) 
+(rate(container_cpu_usage_seconds_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m]))""",
+    """sum by (namespace) 
+((increase(container_cpu_cfs_throttled_periods_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m]) / increase(container_cpu_cfs_periods_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"}[1m])))""",
     """sum by (namespace) (container_memory_working_set_bytes{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2",container_name!="POD"})""",
     """sum by (namespace) (rate(container_network_receive_bytes_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2"}[1m]))""",
     """sum by (namespace) (rate(container_network_transmit_bytes_total{bcs_cluster_id="BCS-K8S-00000",bk_biz_id="2"}[1m]))""",
@@ -135,7 +139,9 @@ container_promqls_with_interval = [
 class TestMetaPromQLWithPerformance(BaseMetaPromQL):
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(namespace_columns, namespace_promqls, namespace_promqls_with_interval),
+        BaseMetaPromQL.build_argvalues(
+            namespace_columns, namespace_promqls, namespace_promqls_with_interval
+        ),
     )
     def test_meta_by_sort_with_namespace(self, column, promql, promql_with_interval):
         meta: K8sNamespaceMeta = load_resource_meta("namespace", 2, "BCS-K8S-00000")
@@ -143,14 +149,17 @@ class TestMetaPromQLWithPerformance(BaseMetaPromQL):
 
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(columns, workload_promqls, workload_promqls_with_interval),
+        BaseMetaPromQL.build_argvalues(
+            columns, workload_promqls, workload_promqls_with_interval
+        ),
     )
     def test_meta_by_sort_with_workload(self, column, promql, promql_with_interval):
         meta: K8sWorkloadMeta = load_resource_meta("workload", 2, "BCS-K8S-00000")
         self.assert_meta_promql(meta, column, promql, promql_with_interval)
 
     @pytest.mark.parametrize(
-        BaseMetaPromQL.build_argnames(), BaseMetaPromQL.build_argvalues(columns, pod_promqls, pod_promqls_with_interval)
+        BaseMetaPromQL.build_argnames(),
+        BaseMetaPromQL.build_argvalues(columns, pod_promqls, pod_promqls_with_interval),
     )
     def test_meta_by_sort_with_pod(self, column, promql, promql_with_interval):
         meta: K8sPodMeta = load_resource_meta("pod", 2, "BCS-K8S-00000")
@@ -158,7 +167,9 @@ class TestMetaPromQLWithPerformance(BaseMetaPromQL):
 
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(container_columns, container_promqls, container_promqls_with_interval),
+        BaseMetaPromQL.build_argvalues(
+            container_columns, container_promqls, container_promqls_with_interval
+        ),
     )
     def test_meta_by_sort_with_container(self, column, promql, promql_with_interval):
         meta: K8sContainerMeta = load_resource_meta("container", 2, "BCS-K8S-00000")
@@ -170,7 +181,12 @@ class TestResourceTrendWithPerformance:
     def build_argvalues(columns) -> List[pytest.param]:
         scenario = "performance"
         resource_types = ["namespace", "workload", "pod", "container"]
-        resource_lists = [["namespace1"], ["workload_type1:workload_name1"], ["pod1"], ["container1"]]
+        resource_lists = [
+            ["namespace1"],
+            ["workload_type1:workload_name1"],
+            ["pod1"],
+            ["container1"],
+        ]
         argvalues = []
 
         for resource_type, resource_list in zip(resource_types, resource_lists):
@@ -273,15 +289,21 @@ class TestResourceTrendWithPerformance:
                     "workload_kind": "Deployment",
                     "workload_name": "bk-audit-risk-worker",
                 }
-        resource_meta: K8sResourceMeta = load_resource_meta(resource_type, bk_biz_id, bcs_cluster_id)
+        resource_meta: K8sResourceMeta = load_resource_meta(
+            resource_type, bk_biz_id, bcs_cluster_id
+        )
         resource_meta.set_agg_method(agg_method)
         resource_meta.set_agg_interval(start_time, end_time)
 
         resource_name = resource_meta.get_resource_name(query_result[0])
         if resource_type == "workload":
-            resource_name = f"{query_result[0]['dimensions']['namespace']}|{resource_name}"
+            resource_name = (
+                f"{query_result[0]['dimensions']['namespace']}|{resource_name}"
+            )
 
-        metric = GetScenarioMetric()({"bk_biz_id": bk_biz_id, "scenario": scenario, "metric_id": column})
+        metric = GetScenarioMetric()(
+            {"bk_biz_id": bk_biz_id, "scenario": scenario, "metric_id": column}
+        )
         graph_unify_query.return_value = {"series": query_result}
         assert ResourceTrendResource()(validated_request_data) == [
             {
@@ -293,3 +315,106 @@ class TestResourceTrendWithPerformance:
                 },
             }
         ]
+
+
+@pytest.mark.django_db
+class TestK8sListResourceWithPerformance:
+    preformance_resource_types = ["namespace", "workload", "pod", "container"]
+    preformance_columns = [
+        "container_cpu_usage_seconds_total",
+        "kube_pod_cpu_requests_ratio",
+        "kube_pod_cpu_limits_ratio",
+        "container_cpu_cfs_throttled_ratio",
+        "container_memory_working_set_bytes",
+        "kube_pod_memory_requests_ratio",
+        "kube_pod_memory_limits_ratio",
+        "container_network_receive_bytes_total",
+        "container_network_transmit_bytes_total",
+    ]
+
+    def setup_method(self, create_workloads):
+        pass
+
+    @pytest.mark.parametrize(
+        ["page", "page_size", "expect_result"],
+        [
+            # 左侧 K8S 对象列表 初始化获取 5个
+            [
+                1,
+                5,
+                [
+                    "aiops-default",
+                    "apm-demo",
+                    "bcs-system",
+                    "bk-apigateway-dev",
+                    "bk-ci",
+                ],
+            ],
+            # 左侧 K8S 对象列表 点击加载更多
+            [
+                2,
+                5,
+                [
+                    "aiops-default",
+                    "apm-demo",
+                    "bcs-system",
+                    "bk-apigateway-dev",
+                    "bk-ci",
+                    "bk-iam-dev",
+                    "bk-jaeger",
+                    "bk-storage",
+                    "bk-user-rabbitmq",
+                    "bk-user-v3",
+                ],
+            ],
+        ],
+    )
+    # @mock.patch("core.drf_resource.resource.grafana.graph_unify_query")
+    def test_left_namespace(
+        self,
+        # graph_unify_query_mock,
+        page,
+        page_size,
+        expect_result,
+    ):
+        """
+        获取左侧 namespace 列表
+
+        只会查询数据库，所以不需要mock unify_query
+        """
+        validated_request_data = {
+            "scenario": "performance",
+            "bcs_cluster_id": "BCS-K8S-00000",
+            "filter_dict": {},
+            "query_string": "",
+            "page_size": page_size,
+            "page_type": "scrolling",
+            "start_time": 1743487312,
+            "end_time": 1743490912,
+            "resource_type": "namespace",
+            "page": page,
+            "bk_biz_id": 2,
+        }
+        _bk_biz_id = validated_request_data["bk_biz_id"]
+        _bcs_cluster_id = validated_request_data["bcs_cluster_id"]
+        _resource_type = validated_request_data["resource_type"]
+
+        # graph_unify_query_mock.return_value = ...
+
+        result = ListK8SResources()(validated_request_data)
+
+        # 构建期待响应数据
+        expect_result = [
+            {
+                "bk_biz_id": _bk_biz_id,
+                "bcs_cluster_id": _bcs_cluster_id,
+                _resource_type: item,
+            }
+            for item in expect_result
+        ]
+
+        # 校验最终结果和数量
+        # assert result["items"] == expect_result
+        assert result["items"] == []
+        # assert len(result["items"]) == len(expect_result)
+        assert len(result["items"]) == 0

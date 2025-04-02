@@ -13,7 +13,6 @@ from typing import List
 
 import mock
 import pytest
-
 from monitor_web.k8s.core.meta import (
     K8sIngressMeta,
     K8sNamespaceMeta,
@@ -295,7 +294,7 @@ class TestK8sListResourceWithNetwork:
     ]
 
     def setup_method(self, create_workloads, create_pods, create_containers):
-        pass
+        create_workloads()
 
     @mock.patch("core.drf_resource.resource.grafana.graph_unify_query")
     def test_with_namespace(self, column, method):
@@ -336,6 +335,7 @@ class TestK8sListResourceWithNetwork:
         pass
 
     def test_with_namespace_with_right(self):
+        ...
     # def test_with_ingress(self):
     #     pass
 
@@ -344,3 +344,19 @@ class TestK8sListResourceWithNetwork:
 
     # def test_with_pod(self):
     #     pass
+
+
+    def test_heihe(self):
+        """黑盒测试
+        
+        传入参数，只校验最终返回的结果， 不校验中间的过程
+        """
+        pass
+    
+    def test_with_xuqiu1(self):
+        """从需求角度出发，校验传参和返回值，不考虑过程"""
+        pass
+    
+    def test_with_daimaluoji(self):
+        """从代码逻辑出发，考虑代码中走不同分支数据的变化"""
+        pass
