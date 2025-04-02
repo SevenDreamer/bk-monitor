@@ -10,6 +10,7 @@ specific language governing permissions and limitations under the License.
 """
 
 import pytest
+
 from monitor_web.k8s.core.filters import ClusterFilter, load_resource_filter
 from monitor_web.k8s.core.meta import (
     FilterCollection,
@@ -26,7 +27,6 @@ from monitor_web.tests.k8s.test_filter import PodFilter
 
 @pytest.mark.django_db
 class TestFilterCollection:
-    
     def test_has_only_fields(self, create_pods):
         """
         测试 meta 有 only_fields 属性时的处理逻辑
@@ -35,20 +35,22 @@ class TestFilterCollection:
         # assert isinstance(meta, K8sPodMeta)
         # filter_collection = FilterCollection(meta=meta)
         assert len(list(meta.filter.query_set)) > 0
-        assert list(meta.filter.query_set) == list(meta.resource_class.objects.all().order_by("id").only(*meta.only_fields))
+        assert list(meta.filter.query_set) == list(
+            meta.resource_class.objects.all().order_by("id").only(*meta.only_fields)
+        )
 
-    def test_add_and_remove_filter(self,create_pods):
+    def test_add_and_remove_filter(self, create_pods):
         """
         测试 add 和 remove 方法
         """
         meta = load_resource_meta("pod", 2, "BCS-K8S-00000")
-        
+
         space_filter = load_resource_filter("bk_biz_id", meta.bk_biz_id)
-        
+
         # remove
         meta.filter.remove(space_filter)
         assert space_filter.filter_uid not in meta.filter.filters
-        
+
         # add
         meta.filter.add(space_filter)
         assert space_filter.filter_uid in meta.filter.filters
@@ -56,11 +58,14 @@ class TestFilterCollection:
     def test_filter_queryset(self, create_pods):
         meta = load_resource_meta("pod", 2, "BCS-K8S-00000")
         query_set = meta.filter.filter_queryset
-        assert str(query_set.query) == "SELECT `bkmonitor_bcspod`.`id`, `bkmonitor_bcspod`.`bk_biz_id`, `bkmonitor_bcspod`.`bcs_cluster_id`, `bkmonitor_bcspod`.`name`, `bkmonitor_bcspod`.`namespace`, `bkmonitor_bcspod`.`workload_type`, `bkmonitor_bcspod`.`workload_name` FROM `bkmonitor_bcspod` WHERE (`bkmonitor_bcspod`.`bcs_cluster_id` = BCS-K8S-00000 AND `bkmonitor_bcspod`.`bk_biz_id` = 2) ORDER BY `bkmonitor_bcspod`.`id` ASC"
+        assert (
+            str(query_set.query)
+            == "SELECT `bkmonitor_bcspod`.`id`, `bkmonitor_bcspod`.`bk_biz_id`, `bkmonitor_bcspod`.`bcs_cluster_id`, `bkmonitor_bcspod`.`name`, `bkmonitor_bcspod`.`namespace`, `bkmonitor_bcspod`.`workload_type`, `bkmonitor_bcspod`.`workload_name` FROM `bkmonitor_bcspod` WHERE (`bkmonitor_bcspod`.`bcs_cluster_id` = BCS-K8S-00000 AND `bkmonitor_bcspod`.`bk_biz_id` = 2) ORDER BY `bkmonitor_bcspod`.`id` ASC"
+        )
 
     def test_transform_filter_dict(self, create_pods):
         meta = load_resource_meta("pod", 2, "BCS-K8S-00000")
-        
+
         # 拿 ClusterFilter的过滤器检查是否有对应的meta
         filter_obj = list(meta.filter.filters.values())[0]
         assert isinstance(filter_obj, ClusterFilter)
@@ -82,6 +87,7 @@ class TestFilterCollection:
         # 传 pod_name 传多个值
         filter_obj = load_resource_filter("pod_name", ["test-pod-1", "test-pod-2"])
         assert meta.filter.transform_filter_dict(filter_obj) == {"name__in": ["test-pod-1", "test-pod-2"]}
+
 
 class TestK8sResourceMeta:
     def test_get_from_meta(self):

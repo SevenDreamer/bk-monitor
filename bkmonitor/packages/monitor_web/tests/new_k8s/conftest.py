@@ -16,9 +16,9 @@ from typing import List
 import pytest
 from django.test import TestCase
 from django.utils import timezone
-from monitor_web.tests.new_k8s.test_resource import TestGetScenarioMetric
 
 from bkmonitor.models import BCSCluster, BCSContainer, BCSPod, BCSWorkload
+from monitor_web.tests.new_k8s.test_resource import TestGetScenarioMetric
 
 pytestsmark = pytest.mark.django_db
 
@@ -54,9 +54,21 @@ def ensure_test_get_scenario_metric():
     params = {k: v for k, v in zip(test_instance.argnames, test_instance.argvalues[0].values)}
     test_instance.test_with_metric(**params)
 
+
 @pytest.fixture()
 def create_namespaces():
-    namespace_name = ["aiops-default","apm-demo","bcs-system","bk-apigateway-dev", "bk-ci", "bk-iam-dev","bk-jaeger","bk-storage","bk-user-rabbitmq","bk-user-v3"]
+    namespace_name = [
+        "aiops-default",
+        "apm-demo",
+        "bcs-system",
+        "bk-apigateway-dev",
+        "bk-ci",
+        "bk-iam-dev",
+        "bk-jaeger",
+        "bk-storage",
+        "bk-user-rabbitmq",
+        "bk-user-v3",
+    ]
     for namespace in namespace_name:
         BCSWorkload(
             bk_biz_id=2,
@@ -68,6 +80,7 @@ def create_namespaces():
             last_synced_at=timezone.now(),
             pod_count=0,
         ).save()
+
 
 @pytest.fixture()
 def create_workloads():

@@ -13,6 +13,7 @@ from typing import List
 
 import mock
 import pytest
+
 from monitor_web.k8s.core.meta import (
     K8sContainerMeta,
     K8sNamespaceMeta,
@@ -139,9 +140,7 @@ container_promqls_with_interval = [
 class TestMetaPromQLWithPerformance(BaseMetaPromQL):
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(
-            namespace_columns, namespace_promqls, namespace_promqls_with_interval
-        ),
+        BaseMetaPromQL.build_argvalues(namespace_columns, namespace_promqls, namespace_promqls_with_interval),
     )
     def test_meta_by_sort_with_namespace(self, column, promql, promql_with_interval):
         meta: K8sNamespaceMeta = load_resource_meta("namespace", 2, "BCS-K8S-00000")
@@ -149,9 +148,7 @@ class TestMetaPromQLWithPerformance(BaseMetaPromQL):
 
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(
-            columns, workload_promqls, workload_promqls_with_interval
-        ),
+        BaseMetaPromQL.build_argvalues(columns, workload_promqls, workload_promqls_with_interval),
     )
     def test_meta_by_sort_with_workload(self, column, promql, promql_with_interval):
         meta: K8sWorkloadMeta = load_resource_meta("workload", 2, "BCS-K8S-00000")
@@ -167,9 +164,7 @@ class TestMetaPromQLWithPerformance(BaseMetaPromQL):
 
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(
-            container_columns, container_promqls, container_promqls_with_interval
-        ),
+        BaseMetaPromQL.build_argvalues(container_columns, container_promqls, container_promqls_with_interval),
     )
     def test_meta_by_sort_with_container(self, column, promql, promql_with_interval):
         meta: K8sContainerMeta = load_resource_meta("container", 2, "BCS-K8S-00000")
@@ -289,21 +284,15 @@ class TestResourceTrendWithPerformance:
                     "workload_kind": "Deployment",
                     "workload_name": "bk-audit-risk-worker",
                 }
-        resource_meta: K8sResourceMeta = load_resource_meta(
-            resource_type, bk_biz_id, bcs_cluster_id
-        )
+        resource_meta: K8sResourceMeta = load_resource_meta(resource_type, bk_biz_id, bcs_cluster_id)
         resource_meta.set_agg_method(agg_method)
         resource_meta.set_agg_interval(start_time, end_time)
 
         resource_name = resource_meta.get_resource_name(query_result[0])
         if resource_type == "workload":
-            resource_name = (
-                f"{query_result[0]['dimensions']['namespace']}|{resource_name}"
-            )
+            resource_name = f"{query_result[0]['dimensions']['namespace']}|{resource_name}"
 
-        metric = GetScenarioMetric()(
-            {"bk_biz_id": bk_biz_id, "scenario": scenario, "metric_id": column}
-        )
+        metric = GetScenarioMetric()({"bk_biz_id": bk_biz_id, "scenario": scenario, "metric_id": column})
         graph_unify_query.return_value = {"series": query_result}
         assert ResourceTrendResource()(validated_request_data) == [
             {

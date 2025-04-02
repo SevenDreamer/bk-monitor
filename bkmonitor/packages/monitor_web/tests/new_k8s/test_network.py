@@ -13,6 +13,7 @@ from typing import List
 
 import mock
 import pytest
+
 from monitor_web.k8s.core.meta import (
     K8sIngressMeta,
     K8sNamespaceMeta,
@@ -132,9 +133,7 @@ class TestMetaPromQLWithNetwork(BaseMetaPromQL):
 
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(
-            columns, namespace_promqls, namespace_promqls_with_interval
-        ),
+        BaseMetaPromQL.build_argvalues(columns, namespace_promqls, namespace_promqls_with_interval),
     )
     def test_meta_by_sort_with_namespace(self, column, promql, promql_with_interval):
         meta: K8sNamespaceMeta = load_resource_meta("namespace", 2, "BCS-K8S-00000")
@@ -142,9 +141,7 @@ class TestMetaPromQLWithNetwork(BaseMetaPromQL):
 
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(
-            columns, ingress_promqls, ingress_promqls_with_interval
-        ),
+        BaseMetaPromQL.build_argvalues(columns, ingress_promqls, ingress_promqls_with_interval),
     )
     def test_meta_by_sort_with_ingress(self, column, promql, promql_with_interval):
         meta: K8sIngressMeta = load_resource_meta("ingress", 2, "BCS-K8S-00000")
@@ -152,9 +149,7 @@ class TestMetaPromQLWithNetwork(BaseMetaPromQL):
 
     @pytest.mark.parametrize(
         BaseMetaPromQL.build_argnames(),
-        BaseMetaPromQL.build_argvalues(
-            columns, service_promqls, service_promqls_with_interval
-        ),
+        BaseMetaPromQL.build_argvalues(columns, service_promqls, service_promqls_with_interval),
     )
     def test_meta_by_sort_with_service(self, column, promql, promql_with_interval):
         meta: K8sServiceMeta = load_resource_meta("service", 2, "BCS-K8S-00000")
@@ -166,9 +161,12 @@ class TestResourceTrendWithNetwork:
     def build_argvalues(columns) -> List[pytest.param]:
         scenario = "network"
         resource_types = [
-            "namespace","ingress", "service","pod",
+            "namespace",
+            "ingress",
+            "service",
+            "pod",
         ]
-        resource_lists = [["aiops-default"], ["bcs-ui"],["bcs-api-gateway"], ["apm-demo-859495cbd7-7tjn5"]]
+        resource_lists = [["aiops-default"], ["bcs-ui"], ["bcs-api-gateway"], ["apm-demo-859495cbd7-7tjn5"]]
         argvalues = []
 
         for resource_type, resource_list in zip(resource_types, resource_lists):
@@ -257,16 +255,12 @@ class TestResourceTrendWithNetwork:
                     "pod_name": "bcs-services-stack-bk-micro-gateway-7f447d8547-wsgp2",
                     "service": "bcs-api-gateway",
                 }
-        resource_meta: K8sResourceMeta = load_resource_meta(
-            resource_type, bk_biz_id, bcs_cluster_id
-        )
+        resource_meta: K8sResourceMeta = load_resource_meta(resource_type, bk_biz_id, bcs_cluster_id)
         resource_meta.set_agg_method(agg_method)
         resource_meta.set_agg_interval(start_time, end_time)
 
         resource_name = resource_meta.get_resource_name(query_result[0])
-        metric = GetScenarioMetric()(
-            {"bk_biz_id": bk_biz_id, "scenario": scenario, "metric_id": column}
-        )
+        metric = GetScenarioMetric()({"bk_biz_id": bk_biz_id, "scenario": scenario, "metric_id": column})
         graph_unify_query.return_value = {"series": query_result}
         assert ResourceTrendResource()(validated_request_data) == [
             {
@@ -309,7 +303,7 @@ class TestK8sListResourceWithNetwork:
             "end_time": 1742290363,
             "method": method,
         }
-        
+
         resource_type = validated_request_data["resource_type"]
         bk_biz_id = validated_request_data["bk_biz_id"]
         bcs_cluster_id = validated_request_data["bcs_cluster_id"]
@@ -319,23 +313,24 @@ class TestK8sListResourceWithNetwork:
         # end_time = validated_request_data["end_time"]
         # column = validated_request_data["column"]
         # scenario = validated_request_data["scenario"]
-        
+
         # 校验重点，检查 orm 和 promql 语句的变化
-        
+
         # 1. 校验初始化时的 orm
         resource_meta: K8sResourceMeta = load_resource_meta(resource_type, bk_biz_id, bcs_cluster_id)
-        
+
         # 2. 校验 添加了 query_string 之后的 orm
-        
-        # 3. 
-        
+
+        # 3.
+
         assert ListK8SResources()(validated_request_data) == {}
-    
+
     def test_with_namespace_with_left(self):
         pass
 
     def test_with_namespace_with_right(self):
         ...
+
     # def test_with_ingress(self):
     #     pass
 
@@ -345,18 +340,17 @@ class TestK8sListResourceWithNetwork:
     # def test_with_pod(self):
     #     pass
 
-
     def test_heihe(self):
         """黑盒测试
-        
+
         传入参数，只校验最终返回的结果， 不校验中间的过程
         """
         pass
-    
+
     def test_with_xuqiu1(self):
         """从需求角度出发，校验传参和返回值，不考虑过程"""
         pass
-    
+
     def test_with_daimaluoji(self):
         """从代码逻辑出发，考虑代码中走不同分支数据的变化"""
         pass
