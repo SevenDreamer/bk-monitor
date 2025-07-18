@@ -133,10 +133,30 @@ class GetDataSourceConfigResource(Resource):
                 for dimension in metric["dimensions"]:
                     table_dimension_mapping.setdefault(table_id, {})[dimension["id"]] = dimension
 
+            """
+            metric["metric_field"] = "TooManyActivePods",
+            metric["metric_field_name"] = "TooManyActivePods-[k8s][不监控]蓝鲸7.0(BCS-K8S-00000)"
+            """
             metric_dict[table_id]["metrics"].append({"id": metric["metric_field"], "name": metric["metric_field_name"]})
 
         for table_id, data_source_config in metric_dict.items():
             data_source_config["dimensions"] = list(table_dimension_mapping.get(table_id, {}).values())
+        """
+        {
+        "id": "2_bkmonitor_event_1573196",
+        "bk_data_id": 1573196,
+        "name": "[k8s][不监控]蓝鲸7.0(BCS-K8S-00000)",
+        "metrics": [
+            {
+            "id": "TooManyActivePods",
+            "name": "TooManyActivePods-[k8s][不监控]蓝鲸7.0(BCS-K8S-00000)"
+            }
+        ],
+        "time_field": "time",
+        "is_platform": false,
+        "dimensions": []
+        }
+        """
         return list(metric_dict.values())
 
 

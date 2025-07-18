@@ -10,7 +10,6 @@ specific language governing permissions and limitations under the License.
 
 import abc
 import json
-import os
 
 import yaml
 from django.utils.translation import gettext as _
@@ -20,7 +19,7 @@ from bkmonitor.strategy.new_strategy import Strategy
 from bkmonitor.utils.request import get_request_tenant_id
 from core.errors.plugin import PluginParseError
 from monitor_web.export_import.constant import ImportDetailStatus
-from monitor_web.models import CollectConfigMeta, CollectorPluginMeta, Signature
+from monitor_web.models import CollectConfigMeta, CollectorPluginMeta, PluginVersionHistory, Signature
 from monitor_web.plugin.manager import PluginManagerFactory
 
 
@@ -65,7 +64,18 @@ class CollectConfigParse(BaseParse):
                 "collect_config": self.file_content,
             }
 
-    def check_msg(self):
+    def get_plugin_path(self, plugin_id, plugin_configs: dict[str, str]) -> str | None:
+        # 可以在获取 plugin_configs 的位置去除第一层
+        # 变成如下 {plugin_id}/.../info/meta.yaml
+        # 准确来说，这个应该是 meta_path, 不应该叫plugin_path
+        for plugin_path in plugin_configs.keys():
+            # 文件路径结构 plugin_directory/{plugin_id}/.../
+            if plugin_path.split("/", 1)[1].startswith(plugin_id):
+                return plugin_path
+
+        return None
+
+    def check_msg(self, plugin_configs: dict[str, str]) -> dict[str, PluginVersionHistory]:
         if self.file_content.get("name") is None:
             return None
 
@@ -78,17 +88,23 @@ class CollectConfigParse(BaseParse):
             return fields_check_result
 
         plugin_id = self.file_content.get("plugin_id")
-        self.plugin_path = os.path.join(os.path.dirname(os.path.dirname(self.file_path)), "plugin_directory", plugin_id)
-        if not os.path.exists(self.plugin_path):
+        self.plugin_path = self.get_plugin_path(plugin_id, plugin_configs)
+
+        if not self.plugin_path:
             return {
                 "file_status": ImportDetailStatus.FAILED,
                 "name": self.file_content.get("name"),
                 "collect_config": self.file_content,
                 "error_msg": _("缺少依赖的插件"),
             }
-        parse_plugin_config = self.parse_plugin_msg()
+
+        # plugin_configs:dict[meta_path, meta_content] -> xxx/info/meta.yaml 对应其数据内容
+
+        meta_content = plugin_configs.get(self.plugin_path, "")
+        parse_plugin_config = self.parse_plugin_msg(self.plugin_path, meta_content)
+
         if parse_plugin_config.get("tmp_version"):
-            tmp_version = parse_plugin_config["tmp_version"]
+            tmp_version: PluginVersionHistory = parse_plugin_config["tmp_version"]
             plugin_config = {}
             plugin_config.update(tmp_version.config.config2dict())
             plugin_config.update(tmp_version.info.info2dict())
@@ -114,13 +130,7 @@ class CollectConfigParse(BaseParse):
         else:
             return parse_plugin_config
 
-    def parse_plugin_msg(self):
-        meta_path = ""
-        for root, dirs, filename_list in os.walk(self.plugin_path):
-            if root.endswith("info") and "meta.yaml" in filename_list:
-                meta_path = os.path.join(root, "meta.yaml")
-                break
-
+    def parse_plugin_msg(self, meta_path: str, meta_content: str):
         if not meta_path:
             return {
                 "file_status": ImportDetailStatus.FAILED,
@@ -129,8 +139,6 @@ class CollectConfigParse(BaseParse):
                 "error_msg": _("关联插件信息不完整"),
             }
         try:
-            with open(meta_path) as f:
-                meta_content = f.read()
             meta_dict = yaml.load(meta_content, Loader=yaml.FullLoader)
             plugin_type_display = meta_dict.get("plugin_type")
             for name, display_name in CollectorPluginMeta.PLUGIN_TYPE_CHOICES:
@@ -140,11 +148,11 @@ class CollectConfigParse(BaseParse):
             else:
                 raise PluginParseError({"msg": _("无法解析插件类型")})
 
+            # 没有实际解压，所以不存在真实目录
             import_manager = PluginManagerFactory.get_manager(
                 bk_tenant_id=get_request_tenant_id(),
                 plugin=self.file_content.get("plugin_id"),
                 plugin_type=plugin_type,
-                tmp_path=self.plugin_path,
             )
 
             tmp_version = import_manager.get_tmp_version()
@@ -159,7 +167,7 @@ class CollectConfigParse(BaseParse):
 
 
 class StrategyConfigParse(BaseParse):
-    def check_msg(self):
+    def check_msg(self) -> None | tuple[dict, list]:
         if self.file_content.get("name") is None:
             return None
 

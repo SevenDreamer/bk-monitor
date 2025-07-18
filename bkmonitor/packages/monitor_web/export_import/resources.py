@@ -17,13 +17,16 @@ import os
 import shutil
 import tarfile
 import uuid
+import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from uuid import uuid4
 
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db.models import Q
+from django.db.models.fields.files import FieldFile
 from django.utils.translation import gettext as _
 from rest_framework.exceptions import ValidationError
 
@@ -48,6 +51,7 @@ from monitor_web.commons.file_manager import ExportImportManager
 from monitor_web.commons.report.resources import send_frontend_report_event
 from monitor_web.export_import.constant import (
     DIRECTORY_LIST,
+    ConfigDirectoryName,
     ConfigType,
     ImportDetailStatus,
     ImportHistoryStatus,
@@ -703,6 +707,59 @@ class UploadPackageResource(Resource):
         if not any(list([x in os.listdir(self.parse_path) for x in DIRECTORY_LIST])):
             raise UploadPackageError({"msg": _("导入包目录结构不对")})
 
+    def new_parse_collect_config(self, collect_configs: dict[str, dict], plugin_configs: dict[str, str]):
+        print("[debug]: entry -> new_parse_collect_config")
+        for file_path, file_content in collect_configs.items():
+            # 实例化 -- 校验 file_content -- 添加 plugin_path
+            parse_manager = CollectConfigParse(file_path=file_path)
+            parse_manager.file_content = file_content
+            parse_result = parse_manager.check_msg(plugin_configs)
+
+            print(f"[debug] parse_manager.file_path: {parse_manager.file_path}")
+            print(f"[debug] parse_manager.file_content: {parse_manager.file_content}")
+            print(f"[debug] parse_manager.plugin_path: {parse_manager.plugin_path}")
+            if parse_result["file_status"] == ImportDetailStatus.SUCCESS:
+                ImportParse.objects.create(
+                    name=parse_result["collect_config"]["name"],
+                    label=parse_result["collect_config"].get("label", ""),
+                    uuid=str(uuid4()),
+                    type=ConfigType.COLLECT,
+                    config=parse_result["collect_config"],
+                    file_status=ImportDetailStatus.SUCCESS,
+                    file_id=self.file_id,
+                )
+                try:
+                    ImportParse.objects.update_or_create(
+                        file_id=self.file_id,
+                        type=ConfigType.PLUGIN,
+                        name=parse_result["plugin_config"]["plugin_id"],
+                        defaults={
+                            "name": parse_result["plugin_config"]["plugin_id"],
+                            "type": ConfigType.PLUGIN,
+                            "label": parse_result["plugin_config"]["label"],
+                            "uuid": str(uuid4()),
+                            "config": parse_result["plugin_config"],
+                            "file_status": ImportDetailStatus.SUCCESS,
+                            "file_id": self.file_id,
+                        },
+                    )
+                except KeyError:
+                    # 日志关键字类导入不存储插件信息，在创建时需要新建（它是虚拟插件）
+                    pass
+            else:
+                pass
+                # DEBUG: 注释
+                # ImportParse.objects.create(
+                #     name=parse_result["name"],
+                #     label=parse_result["collect_config"].get("label", ""),
+                #     uuid=str(uuid4()),
+                #     type=ConfigType.COLLECT,
+                #     config=parse_result["collect_config"],
+                #     file_status=ImportDetailStatus.FAILED,
+                #     error_msg=parse_result.get("error_msg", ""),
+                #     file_id=self.file_id,
+                # )
+
     def parse_collect_config(self):
         collect_config_dir = os.path.join(self.parse_path, "collect_config_directory")
         if not os.path.exists(collect_config_dir):
@@ -757,6 +814,41 @@ class UploadPackageResource(Resource):
                     file_id=self.file_id,
                 )
 
+    def new_parse_strategy_config(self, strategy_configs: dict):
+        print("[debug]: entry -> new_parse_strategy_config")
+
+        for file_path, file_content in strategy_configs.items():
+            # 这个部分如果有需要可以抽离出去
+            import_collect_configs = ImportParse.objects.filter(
+                type=ConfigType.COLLECT, file_id=self.file_id, file_status=ImportDetailStatus.SUCCESS
+            )
+            import_collect_config_ids = [
+                collect_config_msg.config["id"] for collect_config_msg in import_collect_configs
+            ]
+
+            # 常规对单个文件的处理
+            parse_manager = StrategyConfigParse(file_path=file_path)
+            parse_manager.file_content = file_content
+            parse_result, bk_collect_config_ids = parse_manager.check_msg()
+            print(f"[debug] parse_manager.file_path: {parse_manager.file_path}")
+            print(f"[debug] parse_manager.file_content: {parse_manager.file_content}")
+            print(f"[debug] parse_manager.plugin_path: {parse_manager.plugin_path}")
+
+            if not set(bk_collect_config_ids).issubset(set(import_collect_config_ids)):
+                parse_result.update({"file_status": ImportDetailStatus.FAILED, "error_msg": _("关联采集配置未发现")})
+
+            # debug 注释
+            # ImportParse.objects.create(
+            #     name=parse_result["name"],
+            #     label=parse_result["config"].get("scenario", ""),
+            #     uuid=str(uuid4()),
+            #     type=ConfigType.STRATEGY,
+            #     config=parse_result["config"],
+            #     file_status=parse_result["file_status"],
+            #     error_msg=parse_result.get("error_msg", ""),
+            #     file_id=self.file_id,
+            # )
+
     def parse_strategy_config(self):
         strategy_config_dir = os.path.join(self.parse_path, "strategy_config_directory")
         if not os.path.exists(strategy_config_dir):
@@ -783,6 +875,28 @@ class UploadPackageResource(Resource):
                 label=parse_result["config"].get("scenario", ""),
                 uuid=str(uuid4()),
                 type=ConfigType.STRATEGY,
+                config=parse_result["config"],
+                file_status=parse_result["file_status"],
+                error_msg=parse_result.get("error_msg", ""),
+                file_id=self.file_id,
+            )
+
+    def new_parse_view_config(self, view_configs: dict):
+        print("[debug]: entry -> new_parse_view_config")
+
+        for file_path, file_content in view_configs.items():
+            parse_manager = ViewConfigParse(file_path=file_path)
+            parse_manager.file_content = file_content
+            parse_result = parse_manager.check_msg()
+            print(f"[debug] parse_manager.file_path: {parse_manager.file_path}")
+            print(f"[debug] parse_manager.file_content: {parse_manager.file_content}")
+            print(f"[debug] parse_manager.plugin_path: {parse_manager.plugin_path}")
+
+            ImportParse.objects.create(
+                name=parse_result["name"],
+                label="view",
+                uuid=str(uuid4()),
+                type=ConfigType.VIEW,
                 config=parse_result["config"],
                 file_status=parse_result["file_status"],
                 error_msg=parse_result.get("error_msg", ""),
@@ -819,6 +933,67 @@ class UploadPackageResource(Resource):
         self.parse_strategy_config()
         self.parse_view_config()
 
+    def parse_package_without_decompress(self, file: FieldFile) -> None:
+        """
+        针对zip 和tar相关的压缩包进行处理
+        """
+        configs: dict[str, str] = {}
+
+        # √  拆解压缩包，只获取 .yaml, .yml, .json 后缀的配置文件
+        if file.name.endswith(".zip"):
+            with zipfile.ZipFile(file.file, "r") as package_file:
+                for file_info in package_file.infolist():
+                    if file_info.filename.endswith((".yaml", ".yml", ".json")):
+                        with package_file.open(file) as f:
+                            configs[file.name] = f.read().decode("utf-8")
+        else:
+            with tarfile.open(fileobj=file.file) as package_file:
+                for member in package_file.getmembers():
+                    if member.name.endswith((".yaml", ".yml", ".json")):
+                        f = package_file.extractfile(member)
+                        if f:
+                            configs[member.name] = f.read().decode("utf-8")
+        print(f"[debug] configs.keys(): {configs.keys()}")
+        # √ 确保遍历的第一层目录集合至少包含 DIRECTORY_LIST
+        if set(DIRECTORY_LIST) - set(file_path.split("/")[0] for file_path in configs.keys()):
+            raise UploadPackageError({"msg": _("导入包目录结构不对")})
+
+        # 区分成四个配置目录
+        collect_configs: dict[str, dict] = {}
+        plugin_configs: dict[str, str] = {}
+        strategy_configs: dict[str, dict] = {}
+        view_configs: dict[str, dict] = {}
+        for file_name, content in configs.items():
+            file_path = Path(file_name)
+            config_directory_name = str(file_path).split("/")[0]
+            if config_directory_name == ConfigDirectoryName.collect:
+                collect_configs[file_name] = json.loads(content)
+            elif config_directory_name == ConfigDirectoryName.strategy:
+                strategy_configs[file_name] = json.loads(content)
+            elif config_directory_name == ConfigDirectoryName.view:
+                view_configs[file_name] = json.loads(content)
+            elif (
+                config_directory_name == ConfigDirectoryName.plugin
+                and file_path.parent.name == "info"
+                and file_path.name == "meta.yaml"
+            ):
+                plugin_configs[file_name] = content
+
+        print(f"[debug] collect_configs: {collect_configs}")
+        print(f"[debug] plugin_configs: {plugin_configs}")
+        print(f"[debug] strategy_configs: {strategy_configs}")
+        print(f"[debug] view_configs: {view_configs}")
+
+        # 实际里面的目录有
+        # - strategy_config_directory
+        # - collect_config_drerctory， 这个里面还要拿一下配置的目录
+        # - view_config_directory
+        # - plugin_directory
+
+        self.new_parse_collect_config(collect_configs, plugin_configs)
+        self.new_parse_strategy_config(strategy_configs)
+        self.new_parse_view_config(view_configs)
+
     def handle_return_data(self, model_obj):
         if model_obj.type == ConfigType.VIEW:
             label_info = model_obj.label
@@ -849,7 +1024,7 @@ class UploadPackageResource(Resource):
 
         try:
             file_data = validated_request_data["file_data"]
-            file_name = file_data.name
+            file_name: str = file_data.name
             if file_data.size > 500 * 1024 * 1024:
                 raise UploadPackageError({"msg": _("插件包不能大于500M")})
 
@@ -857,11 +1032,20 @@ class UploadPackageResource(Resource):
             validated_request_data.setdefault("file_name", file_name)
             self.file_manager = ExportImportManager.save_file(**validated_request_data)
             self.file_id = self.file_manager.file_obj.id
+
             if self.file_id not in upload_file_ids:
+                file = self.file_manager.file_obj.file_data
+                self.parse_package_without_decompress(file)
                 # 解压导入的文件包
-                self.un_tar_package()
+                # self.un_tar_package()  # 将文件解压到self.parse_path
                 # 解析插件包
-                self.parse_package()
+                # self.parse_package()
+                # self.new_parse_strategy_config()
+
+                # self.new_parse_collect_config(file_path,file_content)
+                # - file_content: dict
+                # 需要从
+                # self.new_parse_view_config()
 
             config_list = list(map(self.handle_return_data, ImportParse.objects.filter(file_id=self.file_id)))
             return {

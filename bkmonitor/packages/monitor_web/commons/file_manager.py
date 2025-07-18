@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tencent is pleased to support the open source community by making 蓝鲸智云 - 监控平台 (BlueKing - Monitor) available.
 Copyright (C) 2017-2021 THL A29 Limited, a Tencent company. All rights reserved.
@@ -8,7 +7,6 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 """
-
 
 import hashlib
 import os
@@ -24,7 +22,7 @@ from monitor_web.models.file import UploadedFileInfo
 from monitor_web.models.plugin import CollectorPluginMeta
 
 
-class BaseFileManager(object):
+class BaseFileManager:
     TYPE = ""
 
     def __init__(self, file):
@@ -45,7 +43,9 @@ class BaseFileManager(object):
             raise FileManagerException(_("%s模块下不存在指定文件") % self.TYPE)
 
     @classmethod
-    def _get_or_create(cls, original_filename, actual_filename, file_md5, relative_path, is_dir=False):
+    def _get_or_create(
+        cls, original_filename, actual_filename, file_md5, relative_path, is_dir=False
+    ) -> tuple[UploadedFileInfo, bool]:
         # 判断是否已存在该文件
         file_obj = UploadedFileInfo.objects.filter(
             file_md5=file_md5, actual_filename=actual_filename, relative_path__startswith=cls.TYPE
@@ -164,13 +164,13 @@ class PluginFileManager(BaseFileManager):
         if plugin_id:
             try:
                 plugin_meta = CollectorPluginMeta.objects.get(bk_tenant_id=get_request_tenant_id(), plugin_id=plugin_id)
-                return super(PluginFileManager, cls).save_file(
+                return super().save_file(
                     file_data=file_data, file_name=file_name, is_dir=False, plugin_id=plugin_meta.plugin_id
                 )
             except CollectorPluginMeta.DoesNotExist:
                 raise FileManagerException(_("非法的plugin_id"))
 
-        return super(PluginFileManager, cls).save_file(file_data, file_name, False)
+        return super().save_file(file_data, file_name, False)
 
     @classmethod
     def save_plugin(cls, file_data, file_path):
@@ -181,7 +181,7 @@ class PluginFileManager(BaseFileManager):
     @classmethod
     def extract_file(cls, file_data, file_path):
         with tarfile.open(fileobj=file_data, mode="r:gz") as tar:
-            tar.extractall(file_path, filter='data')
+            tar.extractall(file_path, filter="data")
         return file_path
 
     @classmethod
@@ -202,7 +202,7 @@ class FileManagerException(Exception):
     def __init__(self, error=None):
         if error is None:
             error = _("文件操作异常")
-        super(FileManagerException, self).__init__(error)
+        super().__init__(error)
 
 
 def walk(storage, top="/", topdown=False, onerror=None):
@@ -210,7 +210,7 @@ def walk(storage, top="/", topdown=False, onerror=None):
     listing directories."""
     try:
         dirs, nondirs = storage.listdir(top)
-    except os.error as err:
+    except OSError as err:
         if onerror is not None:
             onerror(err)
         return
@@ -219,7 +219,6 @@ def walk(storage, top="/", topdown=False, onerror=None):
         yield top, dirs, nondirs
     for name in dirs:
         new_path = os.path.join(top, name)
-        for x in walk(storage, new_path):
-            yield x
+        yield from walk(storage, new_path)
     if not topdown:
         yield top, dirs, nondirs
