@@ -449,33 +449,81 @@ def get_host_strategy_count(bk_biz_id: int, host: Host = None) -> tuple[int, int
 def get_host_alarm_count(bk_biz_id: int, hosts: list[Host], days: int = 7) -> dict[int, dict[int, int]]:
     """
     获取主机关联告警数量，当不传主机时，统计所有主机数据
-    todo: 在ipv6改造后，alert需要添加bk_host_id，该函数需要额外适配
+    支持三种匹配方式（按优先级）：
+    1. event.bk_host_id 直接匹配（最准确）
+    2. event.ip + event.bk_cloud_id 匹配（传统主机告警）
+    3. dimensions 中提取 bk_host_id / ip + bk_cloud_id 匹配（K8s告警）
     :param bk_biz_id: 业务ID
     :param hosts: 主机列表
     :param days: 查询范围
-    :return: Dict[ip, Dict[level, count]]
+    :return: Dict[bk_host_id, Dict[severity, count]]
     """
     search_object = (
         AlertDocument.search(days=days)
         .filter("term", status=EventStatus.ABNORMAL)
         .filter("term", **{"event.bk_biz_id": bk_biz_id})
-        .source(["event.ip", "event.bk_cloud_id", "severity"])
+        .source(["event.ip", "event.bk_cloud_id", "event.bk_host_id", "severity", "dimensions"])
     )
     ip_to_host_id = {(host.bk_host_innerip, host.bk_cloud_id): host.bk_host_id for host in hosts}
+    valid_host_ids = {host.bk_host_id for host in hosts}
 
     alarm_count_info = {host.bk_host_id: {1: 0, 2: 0, 3: 0} for host in hosts}
     for alert in search_object.scan():
-        try:
-            ip = alert.event.ip
-            bk_cloud_id = int(alert.event.bk_cloud_id)
-        except (ValueError, TypeError, AttributeError):
+        host_id = _resolve_host_id_from_alert(alert, ip_to_host_id, valid_host_ids)
+        if host_id is None:
             continue
-
-        # 判断是否是所需主机告警
-        if (ip, bk_cloud_id) not in ip_to_host_id:
-            continue
-        alarm_count_info[ip_to_host_id[(ip, bk_cloud_id)]][int(alert.severity)] += 1
+        alarm_count_info[host_id][int(alert.severity)] += 1
     return alarm_count_info
+
+
+def _resolve_host_id_from_alert(alert, ip_to_host_id: dict[tuple, int], valid_host_ids: set[int]) -> int | None:
+    """
+    从告警中解析出 bk_host_id，支持多种匹配方式。
+    :return: bk_host_id 或 None（无法匹配）
+    """
+    # 优先级1：event.bk_host_id 直接匹配
+    try:
+        bk_host_id = int(alert.event.bk_host_id)
+        if bk_host_id in valid_host_ids:
+            return bk_host_id
+    except (ValueError, TypeError, AttributeError):
+        pass
+
+    # 优先级2：event.ip + event.bk_cloud_id 匹配（传统主机告警）
+    try:
+        ip = alert.event.ip
+        bk_cloud_id = int(alert.event.bk_cloud_id)
+        if ip and (ip, bk_cloud_id) in ip_to_host_id:
+            return ip_to_host_id[(ip, bk_cloud_id)]
+    except (ValueError, TypeError, AttributeError):
+        pass
+
+    # 优先级3：从 dimensions 中提取（K8s 告警通过 KubernetesCMDBEnricher 写入）
+    try:
+        dimensions = alert.dimensions or []
+        dim_map = {}
+        for dim in dimensions:
+            key = dim.get("key") if isinstance(dim, dict) else getattr(dim, "key", None)
+            value = dim.get("value") if isinstance(dim, dict) else getattr(dim, "value", None)
+            if key and value is not None:
+                dim_map[key] = value
+
+        # 3a: dimensions 中的 bk_host_id 直接匹配
+        if "bk_host_id" in dim_map:
+            bk_host_id = int(dim_map["bk_host_id"])
+            if bk_host_id in valid_host_ids:
+                return bk_host_id
+
+        # 3b: dimensions 中的 ip + bk_cloud_id 匹配
+        if "ip" in dim_map and "bk_cloud_id" in dim_map:
+            ip = dim_map["ip"]
+            bk_cloud_id = int(dim_map["bk_cloud_id"])
+            if (ip, bk_cloud_id) in ip_to_host_id:
+                return ip_to_host_id[(ip, bk_cloud_id)]
+    except (ValueError, TypeError, AttributeError):
+        pass
+
+    return None
 
 
 def parse_topo_target(bk_biz_id: int, dimensions: list[str], target: list[dict]) -> list[dict] | None:
